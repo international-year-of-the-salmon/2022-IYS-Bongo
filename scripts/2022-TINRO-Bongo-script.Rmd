@@ -169,7 +169,43 @@ tinro2022_bongo_occ$scientific_name <- gsub("Fish larvae", "Pisces", tinro2022_b
 tinro2022_bongo_occ$scientific_name <- gsub("Brozoan cyphonautes", " ", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Pumkin boy unknown critter could be sea anemone larvae", " ", tinro2022_bongo_occ$scientific_name)
 
+# As we have now changed all the names in the original dataframe to fit the entries in the WoRMS database registry, we can use wm_records_names() again to find all the taxonomic information. 
+tinro2022_bongo_worms_id <- worrms::wm_records_names(unique(tinro2022_bongo_occ$scientific_name), marine_only = FALSE) %>%
+  dplyr::bind_rows() %>% rename(scientific_name = scientificname)
 
+# After manual inspection, there are some AphiaIDs that need to be removed, as the species is listed multiple times.
+tinro2022_bongo_worms_id <- filter(tinro2022_bongo_worms_id, !(AphiaID %in% c("534090", "254409", "503291")))
+
+# Check to see if we missed any:
+unique_taxa <- as.data.frame(unique(tinro2022_bongo_occ$scientific_name))
+names(unique_taxa)[1] <- "scientificname"
+temp_taxa <- left_join(unique_taxa, tinro2022_bongo_worms_id) %>% filter(is.na(AphiaID)) # should be empty.
+print(temp_taxa)
+
+#TODO: Find a solution for species that no WoRMS LSID can be found for: 'Crytoniscid parasitic isopod larvae', 'Microniscid parasitic isopod larvae', 'Tyroscrolex leafy stick', 'Jelly fragments' and 'Brozoan cyphonautes' and 'Pumkin boy unknown critter could be sea anemone larvae'. 
+
+tinro2022_bongo_occ <- left_join(tinro2022_bongo_occ, tinro2022_bongo_worms_id, by = "scientific_name") %>%
+  group_by(eventID) %>%
+  mutate(id = seq_along(eventID)) %>%
+  mutate(occurrenceID = paste(eventID, id, sep = "-"),
+         occurrenceStatus = "present",
+         preparations = "Formalin") %>%
+  select(verbatimIdentification, lifeStage, sex, eventID, identificationQualifier, 
+         scientificName = scientific_name,
+         taxonomicAuthority = authority,
+         taxonomicStatus = status,
+         taxonomicRank = rank,
+         kingdom, phylum, class, order, family, genus, 
+         scientificNameID = lsid,
+         occurrenceID, occurrenceStatus, preparations) %>%
+  mutate(specificEpithet = stringr::word(scientificName, 2))
+
+# Remove NAs from the dataframe:
+tinro2022_bongo_occ[is.na(tinro2022_bongo_occ)] <- ""
+tinro2022_bongo_occ <- as.data.frame(tinro2022_bongo_occ)
+
+# Save as .csv file
+write_csv(tinro2022_bongo_occ, here("standardized_data", "tinro2022_bongo_occ.csv"))
 
 ```
 
