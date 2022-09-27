@@ -1,0 +1,32 @@
+eventID,eventDate,year,month,day,decimalLatitude,decimalLongitude,minimumDepthInMeters,maximumDepthInMeters,sampleSizeValue,eventRemarks,samplingEffort,sampleSizeUnit,geodeticDatum,footprintWKT,coordinateUncertaintyInMeters
+IYS2022-TINRO-3-1-Bongo-1,2022-03-02T02:58:00Z,2022,3,2,48.6283,-172.365,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -172.365   48.6283 ),0
+IYS2022-TINRO-3-3-Bongo-1,2022-03-02T00:31:00Z,2022,3,2,47.8853,-169.4717,0,250,49.0625,paper field tag in jar was in shredded pieces so unable to read data,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -169.4717   47.8853 ),0
+IYS2022-TINRO-3-4-Bongo-1,2022-03-04T05:12:00Z,2022,3,4,47.1218,-170.2465,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -170.2465   47.1218 ),0
+IYS2022-TINRO-3-5-Bongo-1,2022-03-04T15:38:00Z,2022,3,4,46.286,-169.4083,0,255,50.04375,"stickey sample, C. c. and N. sp in poor shap,",vertical paired bongo tows,cubic meters,WGS84,POINT  ( -169.4083   46.286 ),0
+IYS2022-TINRO-3-6-Bongo-1,2022-03-05T00:41:00Z,2022,3,5,45.4917,-168.5283,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -168.5283   45.4917 ),0
+IYS2022-TINRO-3-7-Bongo-1,2022-03-05T08:45:00Z,2022,3,5,45.3843,-167.1688,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -167.1688   45.3843 ),0
+IYS2022-TINRO-3-8-Bongo-1,2022-03-05T17:39:00Z,2022,3,5,46.3983,-167.2067,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -167.2067   46.3983 ),0
+IYS2022-TINRO-3-9-Bongo-1,2022-03-06T03:30:00Z,2022,3,6,47.5033,-167.2575,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -167.2575   47.5033 ),0
+IYS2022-TINRO-3-10-Bongo-1,2022-03-06T12:15:00Z,2022,3,6,48.5393,-167.2583,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -167.2583   48.5393 ),0
+IYS2022-TINRO-3-11-Bongo-1,2022-03-07T22:34:00Z,2022,3,7,49.0483,-169.03,0,260,51.025,paper field tag in jar was in shredded pieces so unable to read data,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -169.03   49.0483 ),0
+IYS2022-TINRO-3-12-Bongo-1,2022-03-07T11:15:00Z,2022,3,7,49.535,-167.3166,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -167.3166   49.535 ),0
+IYS2022-TINRO-3-13-Bongo-1,2022-03-08T02:05:00Z,2022,3,8,50.0767,-165.1367,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -165.1367   50.0767 ),0
+IYS2022-TINRO-3-14-Bongo-1,2022-03-08T15:13:00Z,2022,3,8,50.5583,-163.0283,0,250,49.0625,paper field tag in jar was in shredded pieces so unable to read data,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -163.0283   50.5583 ),0
+IYS2022-TINRO-3-15-Bongo-1,2022-03-09T02:50:00Z,2022,3,9,50.8883,-160.9483,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -160.9483   50.8883 ),0
+IYS2022-TINRO-3-16-Bongo-1,2022-03-09T17:52:00Z,2022,3,9,51.2967,-158.3767,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -158.3767   51.2967 ),0
+IYS2022-TINRO-3-17-Bongo-1,2022-03-09T07:40:00Z,2022,3,9,51.8758,-156.0355,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -156.0355   51.8758 ),0
+IYS2022-TINRO-3-18-Bongo-1,2022-03-10T01:59:00Z,2022,3,10,50.87,-156.1033,0,255,50.04375,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -156.1033   50.87 ),0
+IYS2022-TINRO-3-19-Bongo-1,2022-03-10T17:42:00Z,2022,3,10,49.8833,-156.0066,0,257,50.43625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -156.0066   49.8833 ),0
+IYS2022-TINRO-3-20-Bongo-1,2022-03-11T05:04:00Z,2022,3,11,48.8195,-155.6565,0,255,50.04375,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -155.6565   48.8195 ),0
+IYS2022-TINRO-3-21-Bongo-1,2022-03-13T23:15:00Z,2022,3,13,50.4316,-158.3833,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -158.3833   50.4316 ),0
+IYS2022-TINRO-3-22-Bongo-1,2022-03-14T01:05:00Z,2022,3,14,49.5433,-158.5183,0,262,51.417500000000004,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -158.5183   49.5433 ),0
+IYS2022-TINRO-3-23-Bongo-1,2022-03-14T10:00:00Z,2022,3,14,48.4776,-158.3645,0,265,52.00625,paper field tag in jar was in shredded pieces so unable to read data,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -158.3645   48.4776 ),0
+IYS2022-TINRO-3-24-Bongo-1,2022-03-14T19:35:00Z,2022,3,14,47.4916,-158.34,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -158.34   47.4916 ),0
+IYS2022-TINRO-3-25-Bongo-1,2022-03-16T04:20:00Z,2022,3,16,46.9253,-160.9333,0,255,50.04375,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -160.9333   46.9253 ),0
+IYS2022-TINRO-3-26-Bongo-1,2022-03-16T16:05:00Z,2022,3,16,47.8816,-160.895,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -160.895   47.8816 ),0
+IYS2022-TINRO-3-27-Bongo-1,2022-03-17T02:20:00Z,2022,3,17,48.8916,-160.8733,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -160.8733   48.8916 ),0
+IYS2022-TINRO-3-28-Bongo-1,2022-03-17T15:24:00Z,2022,3,17,49.8983,-160.9983,0,250,49.0625,paper field tag in jar was in shredded pieces so unable to read data,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -160.9983   49.8983 ),0
+IYS2022-TINRO-3-29-Bongo-1,2022-03-18T13:32:00Z,2022,3,18,49.6416,-163.0233,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -163.0233   49.6416 ),0
+IYS2022-TINRO-3-30-Bongo-1,2022-03-18T22:10:00Z,2022,3,18,48.6316,-163.0233,0,250,49.0625,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -163.0233   48.6316 ),0
+IYS2022-TINRO-3-31-Bongo-1,2022-03-19T11:09:00Z,2022,3,19,48.1433,-165.0983,0,260,51.025,,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -165.0983   48.1433 ),0
+IYS2022-TINRO-3-32-Bongo-1,2022-03-20T02:05:00Z,2022,3,20,49.1576,-165.1433,0,250,49.0625,paper field tag in jar was in shredded pieces so unable to read data,vertical paired bongo tows,cubic meters,WGS84,POINT  ( -165.1433   49.1576 ),0

@@ -1,0 +1,192 @@
+---
+title: "2022-TINRO-Bongo"
+author: "Tim van der Stap"
+date: "2022-09-26"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+library(tidyverse)
+library(lubridate)
+library(worrms)
+library(dplyr)
+library(obistools)
+library(readxl)
+library(parsedate)
+library(googledrive)
+library(here)
+```
+
+## Read in files:
+
+``` {r read_file, warning = FALSE}
+tinro2022_bongo_metadata <- read_excel(here("original_data", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "Bongo metadata")
+tinro2022_bongo_data <- read_excel(here("original_data", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "zoop counts")
+```
+
+Create Event Core:
+
+``` {r event core, eval = FALSE}
+tinro2022_bongo_event <- tinro2022_bongo_metadata %>%
+  select(-`T, surf`) %>%
+  mutate(Time = format(`Time, UTC`, "%H:%M:%S"),
+         eventDate = format_iso_8601(as.POSIXct(paste(Date, Time),
+                                                format = "%Y-%m-%d %H:%M:%S",
+                                                tz = "UTC")),
+         eventDate = str_replace(eventDate, "\\+00:00", "Z"))
+
+tinro2022_bongo_event$year <- as.numeric(format(as.Date(tinro2022_bongo_event$eventDate), "%Y"))
+tinro2022_bongo_event$month <- as.numeric(format(as.Date(tinro2022_bongo_event$eventDate), "%m"))
+tinro2022_bongo_event$day <- as.numeric(format(as.Date(tinro2022_bongo_event$eventDate), "%d"))
+
+tinro2022_bongo_event <- tinro2022_bongo_event %>%
+  mutate(zone = 3,
+         eventID = paste("IYS2022", "TINRO", zone, Station, Gear, `Net number`, sep = "-"),
+         minimumDepthInMeters = 0,
+         geodeticDatum = "WGS84",
+         samplingEffort = "vertical paired bongo tows",
+         sampleSizeUnit = "cubic meters") %>%
+  select(eventID,
+         eventDate,
+         year,
+         month,
+         day,
+         decimalLatitude = Latitude,
+         decimalLongitude = Longitude,
+         minimumDepthInMeters,
+         maximumDepthInMeters = `Wire out_m`,
+         sampleSizeValue = `Vol filtered (m^3)`,
+         eventRemarks = Notes,
+         samplingEffort,
+         sampleSizeUnit,
+         geodeticDatum)
+
+tinro2022_bongo_event <- tinro2022_bongo_event %>%
+  mutate(footprintWKT = paste("POINT", " (", tinro2022_bongo_event$decimalLongitude, " ", tinro2022_bongo_event$decimalLatitude, ")"))
+
+coordinates <- obistools::calculate_centroid(tinro2022_bongo_event$footprintWKT) %>% select(coordinateUncertaintyInMeters)
+
+tinro2022_bongo_event <- cbind(tinro2022_bongo_event, coordinates)
+
+# Remove NAs from the dataframe:
+tinro2022_bongo_event[is.na(tinro2022_bongo_event)] <- ""
+tinro2022_bongo_event <- as.data.frame(tinro2022_bongo_event)
+
+# Save as .csv file
+write_csv(tinro2022_bongo_event, here("standardized_data", "tinro2022_bongo_event.csv"))
+```
+
+Next, create the occurrence extension:
+
+```{r occurrence extension, eval = FALSE}
+
+tinro2022_bongo_occ <- tinro2022_bongo_data[-c(1:4, 149:151),]
+
+tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
+  pivot_longer(cols = `1`:`32`,
+               values_to = "ind/m3",
+               names_to = "station") 
+
+tinro2022_bongo_occ$station <- as.numeric(tinro2022_bongo_occ$station)
+tinro2022_bongo_occ <- tinro2022_bongo_occ[order(tinro2022_bongo_occ$station),]
+
+# Parse out `Stage/length` column into two separate columns:
+tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
+  mutate(size_range = ifelse(grepl("\\d+", `Stage/length`), `Stage/length`, NA), # if numerics are included, this needs to be included in a separate column (size_range)
+         `Stage/length` = ifelse(grepl("\\d+", `Stage/length`), NA, `Stage/length`), # Remove any size ranges from the `Stage/length` column
+         sex = ifelse(grepl("F", `Stage/length`), "female", # If `Stage/length` includes an 'F' (i.e. AF), this implies female
+                      ifelse(grepl("M", `Stage/length`), "male", NA)), # If `Stage/length` includes an 'M' (i.e. AM) this implies male
+         `Stage/length` = ifelse(grepl("A", `Stage/length`), "Adult", `Stage/length`)) %>% # any `Stage/lengths` that include 'A' have to be changed to Adult.
+  rename(lifeStage = `Stage/length`,
+         verbatimIdentification = `Station No`) %>%
+  mutate(eventID = paste("IYS2022", "TINRO", "3", station, "Bongo", "1", sep = "-"))
+
+# Size (ranges) in the verbatimIdentification should also be included in the size_range column
+tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
+  mutate(size_range = ifelse(grepl("0.5mm", verbatimIdentification), "0.5mm", size_range),
+         size_range = ifelse(grepl("1.5mm", verbatimIdentification), "1.5mm", size_range),
+         size_range = ifelse(grepl("2.5mm", verbatimIdentification), "2.5mm", size_range),
+         size_range = ifelse(grepl("1mm", verbatimIdentification), "1mm", size_range))
+
+# Lifestages in the verbatimidentification should also be included in the lifeStage column:
+tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
+  mutate(lifeStage = ifelse(grepl("larvae", verbatimIdentification), "larvae", lifeStage),
+         lifeStage = ifelse(grepl("juv.", verbatimIdentification), "juvenile", lifeStage),
+         lifeStage = ifelse(grepl("egg", verbatimIdentification), "egg", lifeStage))
+
+# Create column 'identificationQualifier' to indicate uncertainty in species classification:
+tinro2022_bongo_occ$identificationQualifier <- ifelse(grepl("\\b sp.|spp.", tinro2022_bongo_occ$verbatimIdentification), "sp. indet.", NA)
+
+# Next, duplicate the verbatimIdentification column so that we can make changes where necessary to the scientific names based on the WoRMS Registry:
+tinro2022_bongo_occ$scientific_name <- tinro2022_bongo_occ$verbatimIdentification
+
+# From this column, remove 'sp.' and 'spp.' to begin with;
+tinro2022_bongo_occ$scientific_name <- gsub("\\b sp.\\b|spp.", "", tinro2022_bongo_occ$scientific_name) 
+
+# Remove any special characters (punctuation, brackets etc)
+tinro2022_bongo_occ$scientific_name <- gsub("[[:punct:]]", "", tinro2022_bongo_occ$scientific_name)
+
+# Check accuracy of scientific names:
+worms_id <- worrms::wm_records_names(unique(tinro2022_bongo_occ$scientific_name), marine_only = FALSE) %>% dplyr::bind_rows() %>% rename(scientific_name = scientificname)
+
+# Find out which species are not found in the WoRMS database:
+no_worms_id <- left_join(tinro2022_bongo_occ, worms_id, by = "scientific_name") %>% filter(is.na(AphiaID)) %>% distinct(scientific_name)
+
+#TODO: 34 names have to be changed to match WoRMS accepted names. These have to be changed in the original data table (tinro2022_bongo_occ)
+tinro2022_bongo_occ$scientific_name <- gsub("Scolethricella minor", "Scolecithricella minor", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Scolethricella ovata", "Scolecithricella ovata", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Neocalanus plumchrusflemmingi", "Neocalanus", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Eucheata elongata", "Euchaeta elongata", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Candacia columbia", "Candacia columbiae", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Clausocalanus sp  really small 05mm  tiny 5th leg AF voucher", "Clausocalanus", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Clausocalanus sp  15mm  tiny 5th leg AF voucher", "Clausocalanus", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Clausocalanus sp 1mm", "Clausocalanus", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Clausocalanus sp 25mm", "Clausocalanus", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Mesocalanus tenniucornus", "Mesocalanus tenuicornis", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Acartia longirmis", "Acartia longiremis", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Lucicutia 15mm", "Lucicutia", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Hyperia juv", "Hyperia", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa inspinata", "Thysanoessa inspinata", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa spinifer", "Thysanoessa spinifera", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa inermis", "Thysanoessa inermis", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa longipes", "Thysanoessa longipes", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Chionocetes", "Chionoecetes", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Crytoniscid parasitic isopod larvae", " ", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Microniscid parasitic isopod larvae", " ", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Polycheata", "Polychaeta", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Tyroscrolex leafy stick", " ", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Limiacina helicina", "Limacina helicina", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Squid larvae", "Teuthida", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Eukronia hamata", "Eukrohnia hamata", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Sagitta scrippae  larger transparent fellow", "Sagitta scrippsae", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Oikopluera", "Oikopleura", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Fritilaria", "Fritillaria", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Siphonophore bract", "Siphonophora", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Jelly fragments", " ", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Fish egg", "Pisces", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Fish larvae", "Pisces", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Brozoan cyphonautes", " ", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Pumkin boy unknown critter could be sea anemone larvae", " ", tinro2022_bongo_occ$scientific_name)
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
