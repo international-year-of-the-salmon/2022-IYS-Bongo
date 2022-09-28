@@ -46,7 +46,9 @@ tinro2022_bongo_event <- tinro2022_bongo_event %>%
          minimumDepthInMeters = 0,
          geodeticDatum = "WGS84",
          samplingEffort = "vertical paired bongo tows",
-         sampleSizeUnit = "cubic meters") %>%
+         sampleSizeUnit = "cubic meters")
+
+tinro2022_bongo_event_fnl <- tinro2022_bongo_event %>% 
   select(eventID,
          eventDate,
          year,
@@ -189,7 +191,9 @@ tinro2022_bongo_occ <- left_join(tinro2022_bongo_occ, tinro2022_bongo_worms_id, 
   mutate(id = seq_along(eventID)) %>%
   mutate(occurrenceID = paste(eventID, id, sep = "-"),
          occurrenceStatus = "present",
-         preparations = "Formalin") %>%
+         preparations = "Formalin")
+
+tinro2022_bongo_final <- tinro2022_bongo_occ %>%
   select(verbatimIdentification, lifeStage, sex, eventID, identificationQualifier, 
          scientificName = scientific_name,
          taxonomicAuthority = authority,
@@ -201,19 +205,204 @@ tinro2022_bongo_occ <- left_join(tinro2022_bongo_occ, tinro2022_bongo_worms_id, 
   mutate(specificEpithet = stringr::word(scientificName, 2))
 
 # Remove NAs from the dataframe:
-tinro2022_bongo_occ[is.na(tinro2022_bongo_occ)] <- ""
-tinro2022_bongo_occ <- as.data.frame(tinro2022_bongo_occ)
+tinro2022_bongo_final[is.na(tinro2022_bongo_final)] <- ""
+tinro2022_bongo_final <- as.data.frame(tinro2022_bongo_final)
 
 # Save as .csv file
-write_csv(tinro2022_bongo_occ, here("standardized_data", "tinro2022_bongo_occ.csv"))
-
+write_csv(tinro2022_bongo_final, here("standardized_data", "tinro2022_bongo_occ.csv"))
 ```
 
+Finally, develop the extended measurements or facts extensions and combine them.
 
+Bottom depth:
 
+```{r bottom_depth, eval = FALSE}
+bongo2022_bottomdepth <- tinro2022_bongo_event %>%
+  select(eventID,
+         Depth_m) %>%
+  distinct(eventID, .keep_all = TRUE) %>%
+  mutate_all(as.character) %>%
+  pivot_longer(cols = Depth_m,
+               names_to = "measurementType",
+               values_to = "measurementValue") %>%
+  mutate(
+    measurementType = recode(measurementType,
+                                 Depth_m = "bottom_depth"),
+    measurementID = paste(eventID, measurementType, sep = "-")) %>%
+  mutate(measurementTypeID = case_when(
+    measurementType == "bottom_depth" ~ "http://vocab.nerc.ac.uk/collection/C00/current/SCILOG/"),
+        measurementUnit = case_when(
+    measurementType == "bottom_depth" ~ "meter"),
+        measurementUnitID = case_when(
+    measurementUnit == "meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/ULAA/"),
+    measurementValueID = NA) %>%
+  select(eventID, measurementID, measurementType, measurementTypeID, measurementValue, measurementValueID,
+         measurementUnit, measurementUnitID)
+```
 
+Sampling effort:
 
+``` {r sampling effort, eval = FALSE}
+bongo2022_sampling <- tinro2022_bongo_event %>%
+  select(eventID, 
+         `Vol filtered (m^3)`) %>%
+  mutate(speed_tow = 1) %>%
+  distinct(eventID, .keep_all = TRUE) %>%
+  mutate_all(as.character) %>%
+  pivot_longer(cols = `Vol filtered (m^3)`:speed_tow,
+               names_to = "measurementType",
+               values_to = "measurementValue") %>%
+  mutate(measurementType = recode(measurementType,
+                                 `Vol filtered (m^3)` = "volume_filtered"),
+         measurementID = paste(eventID, measurementType, sep = "-"),
+         measurementTypeID = case_when(
+           measurementType == "volume_filtered" ~ "http://vocab.nerc.ac.uk/collection/P09/current/VOLF/", 
+           measurementType == "speed_tow" ~ "http://vocab.nerc.ac.uk/collection/P01/current/TOWSPEED/"),
+  measurementUnit = case_when(
+    measurementType == "volume_filtered" ~ "cubic meter",
+    measurementType == "speed_tow" ~ "meter per second"),
+  measurementUnitID = case_when(
+    measurementUnit == "cubic meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/MCUB/",
+    measurementUnit == "meter per second" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UVAA/"),
+  measurementValueID = NA) %>%
+    select(eventID, measurementID, measurementType, measurementTypeID, measurementValue, measurementValueID,
+           measurementUnit, measurementUnitID)
+```
 
+Next, add information on the _sampling instrument_. Information on the mesh size and sampling instrument opening came from the Cruise Report and is verified by the data provider. 
+
+``` {r samplingInstrument, eval = FALSE}
+bongo2022_instrument <- tinro2022_bongo_event %>%
+  select(eventID,
+         Gear) %>%
+  mutate(bongo_mesh = 236,
+         bongo_opening = 0.6) %>%
+  distinct(eventID, .keep_all = TRUE) %>%
+  mutate_all(as.character) %>%
+  pivot_longer(cols = Gear:bongo_opening,
+               names_to = "measurementType",
+               values_to = "measurementValue") %>%
+  mutate(measurementID = paste(eventID, "bongo", measurementType, sep = ":"),
+         measurementTypeID = case_when(
+           measurementType == "Gear" ~ "http://vocab.nerc.ac.uk/collection/Q01/current/Q0100002/",
+           measurementType == "bongo_mesh" ~ "http://vocab.nerc.ac.uk/collection/Q01/current/Q0100015/",
+           measurementType == "bongo_opening" ~ "http://vocab.nerc.ac.uk/collection/Q01/current/Q0100017/"))
+
+bongo2022_instrument <- bongo2022_instrument %>%
+  mutate(measurementUnit = case_when(
+           measurementType == "bongo_mesh" ~ "micrometer",
+           measurementType == "bongo_opening" ~ "square meter"),
+         measurementUnitID = case_when(
+           measurementUnit == "micrometer" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UMIC/",
+           measurementUnit == "square meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UMSQ/"),
+         measurementValueID = case_when(
+           measurementValue == "Bongo" ~ "http://vocab.nerc.ac.uk/collection/L22/current/NETT0176/")) %>%
+  select(eventID, measurementID, measurementType, measurementTypeID, measurementValue,
+         measurementValueID, measurementUnit, measurementUnitID)
+```
+
+Next, we create the eMOF extension to associate the length, lifestage and sex measurements to the zooplankton.  
+
+```{r eMOF, eval = FALSE}
+bongo2022_emof <- tinro2022_bongo_occ %>%
+  select(eventID,
+         occurrenceID,
+         lifeStage,
+         sex,
+         `ind/m3`, 
+         size_range) %>%
+  mutate_all(as.character)
+```
+
+```{r specimen size range, eval = FALSE}
+#TODO: Create code to parse out size ranges into separate columns
+
+range <- dplyr::filter(bongo2022_emof, grepl("-", size_range)) %>%
+  separate(col = size_range, into = c("minimumLength", "maximumLength"), sep = "\\-") %>%
+  mutate(size_range = " ")
+
+# Remove any rows where length_mm contains a range, add two dummy columns (minimumLength and maximumLength) and use rbind() to merge `range` with this newly created dataframe.
+minimum <- dplyr::filter(bongo2022_emof, grepl("\\+|>", size_range)) %>%
+  mutate(minimumLength = as.character(unlist(regmatches(size_range, 
+                                                      gregexpr("[[:digit:]]+\\.*[[:digit:]]*", size_range)))),
+         maximumLength = " ")
+
+temp <- bongo2022_emof[ -grep("\\+|>|-", bongo2022_emof$size_range), ] %>%
+  mutate(minimumLength = " ",
+         maximumLength = " ")
+
+bongo2022_emof_fnl <- rbind(range, minimum, temp)
+
+# Remove 'mm' from the size (range) columns:
+bongo2022_emof_fnl[c("minimumLength", "maximumLength", "size_range")] <- lapply(bongo2022_emof_fnl[c("minimumLength", "maximumLength", "size_range")], function(y) gsub("mm", "", y))
+
+# Make some adjustments:
+bongo2022_emof_fnl$length_type <- ifelse(grepl("shell", bongo2022_emof_fnl$maximumLength), "shell length", NA)
+bongo2022_emof_fnl$maximumLength <- gsub("[[:punct:]]", "", bongo2022_emof_fnl$maximumLength)
+bongo2022_emof_fnl$maximumLength <- gsub(" shell length", "", bongo2022_emof_fnl$maximumLength)
+
+#Rremove 'fur' from minimumLength and add it to lifeStage column (assuming fur = fucilia)
+bongo2022_emof_fnl$lifeStage <- ifelse(grepl("fur", bongo2022_emof_fnl$minimumLength), "furcilia", bongo2022_emof_fnl$lifeStage)
+bongo2022_emof_fnl$minimumLength <- gsub("fur", "", bongo2022_emof_fnl$minimumLength)
+
+# Remove 'lar' from size_range and add it to lifeStage column (assuming lar = larvae)
+bongo2022_emof_fnl$lifeStage <- ifelse(grepl("lar", bongo2022_emof_fnl$size_range), "larvae", bongo2022_emof_fnl$lifeStage)
+bongo2022_emof_fnl$size_range <- gsub("lar", "", bongo2022_emof_fnl$size_range)
+
+#TODO: Figure out what to do with 'Megalopa' in the Stage/Length column:
+
+#Extract only sizes (numerical values) from size_range, remove all characters.
+bongo2022_emof_fnl$size_range <- extract_numeric(bongo2022_emof_fnl$size_range)
+```
+
+So then finally the eMOF:
+
+```{r emof cont., eval = FALSE}
+
+bongo2022_emof_fnl <- bongo2022_emof_fnl %>%
+  mutate_all(as.character) %>%
+  pivot_longer(cols = lifeStage:length_type,
+               names_to = "measurementType",
+               values_to = "measurementValue") %>%
+  mutate(measurementID = paste(occurrenceID, measurementType, sep = "-"),
+    measurementTypeID = case_when(
+      measurementType == "size_range" ~ "http://vocab.nerc.ac.uk/collection/P01/current/OBSINDLX/",
+      measurementType == "maximumLength" ~ "http://vocab.nerc.ac.uk/collection/P01/current/OBSMAXLX/",
+      measurementType == "minimumLength" ~ "http://vocab.nerc.ac.uk/collection/P01/current/OBSMINLX/",
+      measurementType == "lifeStage" ~ "http://vocab.nerc.ac.uk/collection/P01/current/LSTAGE01/",
+      measurementType == "sex" ~ "http://vocab.nerc.ac.uk/collection/P01/current/ENTSEX01/",
+      measurementType == "ind/m3" ~ "http://vocab.nerc.ac.uk/collection/P01/current/SDBIOL01/",
+      measurementType == "length_type" ~ " "), 
+    measurementUnit = case_when(
+      measurementType %in% c("length", "minimumLength", "maximumLength") ~ "millimeter",
+      measurementType == "ind/m3" ~ "individuals per cubic meter"), 
+    measurementUnitID = case_when(
+      measurementUnit == "millimeter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UXMM/",
+      measurementUnit == "individuals per cubic meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UPMM/"),
+    measurementValueID = case_when(
+      measurementValue == "male" ~ "http://vocab.nerc.ac.uk/collection/S10/current/S103/",
+      measurementValue == "female" ~ "http://vocab.nerc.ac.uk/collection/S10/current/S102/",
+      measurementValue == "Adult" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1116/",
+      measurementValue == "V" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1112/",
+      measurementValue == "IV" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1110/",
+      measurementValue == "IV-V" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1111/",
+      measurementValue == "III" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S118/",
+      measurementValue == "II" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S117/",
+      measurementValue == "I" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S111/",
+      measurementValue == "juvenile" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1127/",
+      measurementValue == "furcilia" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1123/",
+      measurementValue == "egg" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1122/",
+      measurementValue == "nauplii" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1130/",
+      measurementValue == "cal" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1118/",
+      measurementValue == "larvae" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1128/"),
+    measurementRemarks = NA) %>%
+  drop_na(measurementValue)
+
+bongo2022_tinro_emof <- bind_rows(bongo2022_bottomdepth, bongo2022_sampling, bongo2022_instrument, bongo2022_emof_fnl)
+
+# Make sure the folder path exists already (e.g. ./Bongo/tidy_data)
+write_csv(bongo2022_tinro_emof, here("standardized_data", "bongo2022_tinro_emof.csv"))
+```
 
 
 
