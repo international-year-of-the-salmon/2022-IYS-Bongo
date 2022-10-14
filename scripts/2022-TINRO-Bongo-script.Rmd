@@ -64,12 +64,12 @@ tinro2022_bongo_event_fnl <- tinro2022_bongo_event %>%
          sampleSizeUnit,
          geodeticDatum)
 
-tinro2022_bongo_event <- tinro2022_bongo_event %>%
-  mutate(footprintWKT = paste("POINT", " (", tinro2022_bongo_event$decimalLongitude, " ", tinro2022_bongo_event$decimalLatitude, ")"))
+tinro2022_bongo_event <- tinro2022_bongo_event_fnl %>%
+  mutate(footprintWKT = paste("POINT", " (", tinro2022_bongo_event_fnl$decimalLongitude, " ", tinro2022_bongo_event_fnl$decimalLatitude, ")"))
 
 coordinates <- obistools::calculate_centroid(tinro2022_bongo_event$footprintWKT) %>% select(coordinateUncertaintyInMeters)
 
-tinro2022_bongo_event <- cbind(tinro2022_bongo_event, coordinates)
+tinro2022_bongo_event <- cbind(tinro2022_bongo_event_fnl, coordinates)
 
 # Remove NAs from the dataframe:
 tinro2022_bongo_event[is.na(tinro2022_bongo_event)] <- ""
@@ -83,12 +83,20 @@ Next, create the occurrence extension:
 
 ```{r occurrence extension, eval = FALSE}
 
-tinro2022_bongo_occ <- tinro2022_bongo_data[-c(1:4, 149:151),]
+tinro2022_bongo_counts <- tinro2022_bongo_data[-c(1:4, 149:295),]
+tinro2022_bongo_abund <- tinro2022_bongo_data[-c(1:151),]
 
-tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
+tinro2022_bongo_counts <- tinro2022_bongo_counts %>%
+  pivot_longer(cols = `1`:`32`,
+               values_to = "counts",
+               names_to = "station") 
+
+tinro2022_bongo_abund <- tinro2022_bongo_abund %>%
   pivot_longer(cols = `1`:`32`,
                values_to = "ind/m3",
-               names_to = "station") 
+               names_to = "station")
+
+tinro2022_bongo_occ <- left_join(tinro2022_bongo_counts, tinro2022_bongo_abund)
 
 tinro2022_bongo_occ$station <- as.numeric(tinro2022_bongo_occ$station)
 tinro2022_bongo_occ <- tinro2022_bongo_occ[order(tinro2022_bongo_occ$station),]
@@ -123,7 +131,7 @@ tinro2022_bongo_occ$identificationQualifier <- ifelse(grepl("\\b sp.|spp.", tinr
 # Next, duplicate the verbatimIdentification column so that we can make changes where necessary to the scientific names based on the WoRMS Registry:
 tinro2022_bongo_occ$scientific_name <- tinro2022_bongo_occ$verbatimIdentification
 
-# From this column, remove 'sp.' and 'spp.' to begin with;
+# From this duplicated column, remove 'sp.' and 'spp.' to begin with;
 tinro2022_bongo_occ$scientific_name <- gsub("\\b sp.\\b|spp.", "", tinro2022_bongo_occ$scientific_name) 
 
 # Remove any special characters (punctuation, brackets etc)
@@ -165,7 +173,7 @@ tinro2022_bongo_occ$scientific_name <- gsub("Sagitta scrippae  larger transparen
 tinro2022_bongo_occ$scientific_name <- gsub("Oikopluera", "Oikopleura", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Fritilaria", "Fritillaria", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Siphonophore bract", "Siphonophora", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Jelly fragments", " ", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Jelly fragments", "Cnidaria", tinro2022_bongo_occ$scientific_name) #TODO: Confirm this is correct
 tinro2022_bongo_occ$scientific_name <- gsub("Fish egg", "Pisces", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Fish larvae", "Pisces", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Brozoan cyphonautes", " ", tinro2022_bongo_occ$scientific_name)
@@ -180,7 +188,7 @@ tinro2022_bongo_worms_id <- filter(tinro2022_bongo_worms_id, !(AphiaID %in% c("5
 
 # Check to see if we missed any:
 unique_taxa <- as.data.frame(unique(tinro2022_bongo_occ$scientific_name))
-names(unique_taxa)[1] <- "scientificname"
+names(unique_taxa)[1] <- "scientific_name"
 temp_taxa <- left_join(unique_taxa, tinro2022_bongo_worms_id) %>% filter(is.na(AphiaID)) # should be empty.
 print(temp_taxa)
 
@@ -195,6 +203,8 @@ tinro2022_bongo_occ <- left_join(tinro2022_bongo_occ, tinro2022_bongo_worms_id, 
 
 tinro2022_bongo_final <- tinro2022_bongo_occ %>%
   select(verbatimIdentification, lifeStage, sex, eventID, identificationQualifier, 
+         individualCount = counts,
+         organismQuantity = `ind/m3`,
          scientificName = scientific_name,
          taxonomicAuthority = authority,
          taxonomicStatus = status,
@@ -202,7 +212,8 @@ tinro2022_bongo_final <- tinro2022_bongo_occ %>%
          kingdom, phylum, class, order, family, genus, 
          scientificNameID = lsid,
          occurrenceID, occurrenceStatus, preparations) %>%
-  mutate(specificEpithet = stringr::word(scientificName, 2))
+  mutate(specificEpithet = stringr::word(scientificName, 2),
+         organismQuantityType = "individuals per cubic meter")
 
 # Remove NAs from the dataframe:
 tinro2022_bongo_final[is.na(tinro2022_bongo_final)] <- ""
@@ -210,6 +221,95 @@ tinro2022_bongo_final <- as.data.frame(tinro2022_bongo_final)
 
 # Save as .csv file
 write_csv(tinro2022_bongo_final, here("standardized_data", "tinro2022_bongo_occ.csv"))
+```
+
+We want to standardize the data as well for the IYS Data Template. To put it in that format, combine the Event Core and occurrence extension and select and rename the correct columns:
+
+```{r IYS Template, eval = FALSE}
+bongo2022_template <- left_join(tinro2022_bongo_event, tinro2022_bongo_final, by = "eventID") %>%
+  select(station_event_id = eventID,
+         catch_id = occurrenceID,
+         species_recorded = verbatimIdentification,
+         scientific_name = scientificName,
+         taxonomic_rank = taxonomicRank,
+         lifestage = lifeStage,
+         sex,
+         preservation_method = preparations,
+         catch_count = individualCount,
+         abundance_m3 = organismQuantity,
+         flowmeter_volume_filtered_m3 = sampleSizeValue) %>%
+  mutate(net_number = 1,
+         prop_total_sample = "",
+         sf_proc = "",
+         common_name = "",
+         identified_by = "",
+         date_identified = "",
+         count_method = "Total", #TODO: confirm this
+         depth_volume_filtered_m3 = "",
+         comments = "") #TODO: this could be 'occurrenceRemarks'
+
+# Drop rows where abundance_m3 is 0
+bongo2022_template <- bongo2022_template %>% filter(!abundance_m3 == 0)
+
+# Compared to the 2019 and 2020 data, we should still include information on the proportion of the sample processed when doing taxonomy for each size fraction (prop_sf_proc). This information is included in the zoop data_raw counts sheet:
+
+sf <- read_excel(here("original_data", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "zoop data_raw counts")
+sf <- sf[-c(1:6),]
+
+# Select species column
+sf_species <- sf[, 1]
+
+# Select only the columns where `total counted per split` is NA, as these columns depict the proportion size fractionated:
+col_odd <- seq_len(ncol(sf)) %% 2
+sf <- sf[ , col_odd == 0]
+
+# Combine species column with columns associated with the proportion size fractionated:
+new_sf <- cbind(sf_species, sf)
+
+# Change column headers, and adjust class where necessary:
+new_sf <- setNames(new_sf, c("species_recorded", "Stage/length", "1", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12",
+                             "13", "14", "15", "16", "17", "18", "19", "20", "21", "22", "23", "24", "25", "26", "27", "28", "29", "30", "31", "32"))
+
+new_sf$`1` <- as.numeric(new_sf$`1`)
+
+# pivot long:
+new_sf <- new_sf %>%
+  pivot_longer(cols = 3:33,
+               values_to = "prop_sf_proc",
+               names_to = "station") %>%
+  mutate(station_event_id = paste("IYS2022", "TINRO", "3", station, "Bongo", "1", sep = "-")) %>%
+  drop_na(prop_sf_proc)
+
+# Parse out `Stage/length` column into two separate columns. We have to do this to properly match prop_sf_proc to the correct species/sex/lifestage combination.
+new_sf <- new_sf %>%
+  mutate(size_range = ifelse(grepl("\\d+", `Stage/length`), `Stage/length`, NA), 
+         `Stage/length` = ifelse(grepl("\\d+", `Stage/length`), NA, `Stage/length`), 
+         sex = ifelse(grepl("F", `Stage/length`), "female", 
+                      ifelse(grepl("M", `Stage/length`), "male", NA)), 
+         `Stage/length` = ifelse(grepl("A", `Stage/length`), "Adult", `Stage/length`)) %>% 
+  rename(lifestage = `Stage/length`) %>%
+  select(species_recorded, lifestage, prop_sf_proc, station_event_id, sex)
+
+# Lifestages in the verbatimidentification should also be included in the lifeStage column:
+new_sf <- new_sf %>%
+  mutate(lifestage = ifelse(grepl("larvae", species_recorded), "larvae", lifestage),
+         lifestage = ifelse(grepl("juv.", species_recorded), "juvenile", lifestage),
+         lifestage = ifelse(grepl("egg", species_recorded), "egg", lifestage))
+
+# Remove NAs from the dataframe:
+new_sf[is.na(new_sf)] <- ""
+new_sf <- as.data.frame(new_sf)
+
+# Integrate within the IYS Data Template:
+bongo2022_template <- left_join(bongo2022_template, new_sf, by = c("species_recorded", "station_event_id", "lifestage", "sex"))
+
+col_order <- c("station_event_id", "net_number", "catch_id", "species_recorded", "scientific_name", "taxonomic_rank", "prop_total_sample", "sf_proc", "prop_sf_proc",
+               "lifestage", "sex", "common_name", "identified_by", "date_identified", "preservation_method", "catch_count", "count_method", "abundance_m3",
+               "flowmeter_volume_filtered_m3", "depth_volume_filtered_m3", "comments")
+bongo2022_template <- bongo2022_template[, col_order]
+
+# Save locally:
+write_csv(bongo2022_template, here("IYS_data_template", "IYS2022_Bongo.csv"))
 ```
 
 Finally, develop the extended measurements or facts extensions and combine them.
