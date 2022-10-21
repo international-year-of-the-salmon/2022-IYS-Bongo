@@ -16,13 +16,27 @@ library(readxl)
 library(parsedate)
 library(googledrive)
 library(here)
+library(Hmisc)
+```
+
+Download the latest Data Template for the Shimada and NW Explorer to get the metadata associated with the Bongo tows:
+
+```{r download, eval = FALSE}
+download.file("https://github.com/international-year-of-the-salmon/2022-shimada-data-template/blob/main/IYS2022_Shimada_Data_template.xlsx?raw=true", here::here("IYS_data_template", "IYS2022_Shimada_data.xlsx"), quiet = TRUE, mode = "wb")
+
+download.file("https://github.com/international-year-of-the-salmon/2022-NW-Data-Template/blob/main/IYS2022_NW_Data.xlsx?raw=true", here::here("IYS_data_template", "IYS2022_NW_Data.xlsx"), quiet = TRUE, mode = "wb")
 ```
 
 ## Read in files:
 
 ``` {r read_file, warning = FALSE}
 tinro2022_bongo_metadata <- read_excel(here("original_data", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "Bongo metadata")
+shimada2022_bongo_metadata <- read_excel(here("IYS_data_template", "IYS2022_Shimada_data.xlsx"), sheet = "4. SAMPLING EVENT INFO")
+nw2022_bongo_metadata <- read_excel(here("IYS_data_template", "IYS2022_NW_Data.xlsx"), sheet = "Sampling_Event_Info")
+
 tinro2022_bongo_data <- read_excel(here("original_data", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "zoop counts")
+nw2022_bongo_data <- read_excel(here("IYS_data_template", "IYS2022_Shimada_NW_Zooplankton.xlsx"), sheet = "NWExplorer-Bongo-Taxonomy")
+shim2022_bongo_data <- read_excel(here("IYS_data_template", "IYS2022_Shimada_NW_Zooplankton.xlsx"), sheet = "Shimada-Bongo-Taxonomy")
 ```
 
 Create Event Core:
@@ -36,53 +50,200 @@ tinro2022_bongo_event <- tinro2022_bongo_metadata %>%
                                                 tz = "UTC")),
          eventDate = str_replace(eventDate, "\\+00:00", "Z"))
 
-tinro2022_bongo_event$year <- as.numeric(format(as.Date(tinro2022_bongo_event$eventDate), "%Y"))
-tinro2022_bongo_event$month <- as.numeric(format(as.Date(tinro2022_bongo_event$eventDate), "%m"))
-tinro2022_bongo_event$day <- as.numeric(format(as.Date(tinro2022_bongo_event$eventDate), "%d"))
+tinro2022_bongo_event$Year <- as.numeric(format(as.Date(tinro2022_bongo_event$eventDate), "%Y"))
+tinro2022_bongo_event$Month <- as.numeric(format(as.Date(tinro2022_bongo_event$eventDate), "%m"))
+tinro2022_bongo_event$Day <- as.numeric(format(as.Date(tinro2022_bongo_event$eventDate), "%d"))
 
 tinro2022_bongo_event <- tinro2022_bongo_event %>%
   mutate(zone = 3,
          eventID = paste("IYS2022", "TINRO", zone, Station, Gear, `Net number`, sep = "-"),
          minimumDepthInMeters = 0,
          geodeticDatum = "WGS84",
-         samplingEffort = "vertical paired bongo tows",
+         samplingEffort = "volume seawater filtered",
          sampleSizeUnit = "cubic meters")
 
 tinro2022_bongo_event_fnl <- tinro2022_bongo_event %>% 
-  select(eventID,
-         eventDate,
-         year,
-         month,
-         day,
+  select(eventID, eventDate, Year, Month, Day,
          decimalLatitude = Latitude,
          decimalLongitude = Longitude,
          minimumDepthInMeters,
          maximumDepthInMeters = `Wire out_m`,
          sampleSizeValue = `Vol filtered (m^3)`,
          eventRemarks = Notes,
-         samplingEffort,
-         sampleSizeUnit,
-         geodeticDatum)
+         samplingEffort, sampleSizeUnit, geodeticDatum)
 
-tinro2022_bongo_event <- tinro2022_bongo_event_fnl %>%
-  mutate(footprintWKT = paste("POINT", " (", tinro2022_bongo_event_fnl$decimalLongitude, " ", tinro2022_bongo_event_fnl$decimalLatitude, ")"))
+# For F/V Northwest Explorer:
+nw2022_bongo_metadata <- nw2022_bongo_metadata %>% filter(Event_Type == "Bongo") %>%
+  mutate(eventID = paste(Station_Event_ID, "1", sep = "-"),
+         minimumDepthInMeters = 0,
+         geodeticDatum = "WGS84",
+         sampleSizeValue = 70.65,
+         samplingEffort = "volume seawater filtered",
+         sampleSizeUnit = "cubic meters")
 
-coordinates <- obistools::calculate_centroid(tinro2022_bongo_event$footprintWKT) %>% select(coordinateUncertaintyInMeters)
+nw2022_bongo_metadata <- nw2022_bongo_metadata %>%
+  mutate(Time_Start = as.POSIXct(Time_Start, format = "%H:%M:%S"),
+         Time_End = as.POSIXct(Time_End, format = "%H:%M:%S")) %>%
+  mutate(Time_Start = strftime(Time_Start, format = "%H:%M:%S"),
+         Time_End = strftime(Time_End, format = "%H:%M:%S")) %>%
+  mutate(eventDate_start = paste0(format_ISO8601(as.POSIXct(paste0(as_date(
+    paste0(Year, "-", Month, "-", Day)), " ", Time_Start), tz ="UTC"))))
 
-tinro2022_bongo_event <- cbind(tinro2022_bongo_event_fnl, coordinates)
+# For some tows, no Time_End was recorded. Therefore, for some eventDates, it will be a single recorded time, whereas for most it'll be a time span.
+nw2022_bongo_metadata_1 <- nw2022_bongo_metadata %>%
+  filter(is.na(Time_End)) %>%
+  mutate(eventDate = paste0(eventDate_start, "Z"))
+
+nw2022_bongo_metadata_2 <- nw2022_bongo_metadata %>%
+  filter(!is.na(Time_End)) %>%
+  mutate(eventDate_finish = paste0(format_ISO8601(as.POSIXct(paste0(as_date(
+    paste0(Year, "-", Month, "-", Day)), " ", Time_End), tz = "UTC")), "Z"),
+    eventDate = paste(eventDate_start, eventDate_finish, sep = "/"))
+
+# Bind these rows again:
+nw2022_bongo_metadata <- rbind(nw2022_bongo_metadata_2, nw2022_bongo_metadata_1) 
+
+nw2022_bongo_event_fnl  <- nw2022_bongo_metadata %>% 
+  select(eventID, eventDate, Year, Month, Day,
+         decimalLatitude = Latitude_Start_DecDeg,
+         decimalLongitude = Longitude_Start_DecDeg,
+         minimumDepthInMeters,
+         maximumDepthInMeters = Maximum_Sampling_Depth,
+         sampleSizeValue,
+         eventRemarks = Comments,
+         samplingEffort, sampleSizeUnit, geodeticDatum) 
+
+# For NOAA Bell M. Shimada:
+shim2022_bongo_metadata <- shimada2022_bongo_metadata %>% filter(Event_Type == "Bongo") %>%
+  mutate(eventID = paste(Station_Event_ID, "1", sep = "-"),
+         minimumDepthInMeters = 0,
+         geodeticDatum = "WGS84",
+         sampleSizeValue = 70.65,
+         samplingEffort = "volume seawater filtered",
+         sampleSizeUnit = "cubic meters")
+
+shim2022_bongo_metadata <- shim2022_bongo_metadata %>%
+  mutate(Time_Start = as.POSIXct(Time_Start, format = "%H:%M:%S"),
+         Time_End = as.POSIXct(Time_End, format = "%H:%M:%S")) %>%
+  mutate(Time_Start = strftime(Time_Start, format = "%H:%M:%S"),
+         Time_End = strftime(Time_End, format = "%H:%M:%S")) %>%
+  mutate(eventDate_start = paste0(format_ISO8601(as.POSIXct(paste0(as_date(
+    paste0(Year, "-", Month, "-", Day)), " ", Time_Start), tz ="UTC"))),
+         eventDate_finish = paste0(format_ISO8601(as.POSIXct(paste0(as_date(
+    paste0(Year, "-", Month, "-", Day)), " ", Time_End), tz = "UTC")), "Z"),
+    eventDate = paste(eventDate_start, eventDate_finish, sep = "/"))
+
+shim2022_bongo_metadata_fnl  <- shim2022_bongo_metadata %>% 
+  select(eventID, eventDate, Year, Month, Day,
+         decimalLatitude = Latitude_Start_DecDeg,
+         decimalLongitude = Longitude_Start_DecDeg,
+         minimumDepthInMeters,
+         maximumDepthInMeters = Maximum_Sampling_Depth_Meters,
+         sampleSizeValue,
+         eventRemarks = Comments,
+         samplingEffort, sampleSizeUnit, geodeticDatum) 
+
+IYS2022_bongo_event <- rbind(tinro2022_bongo_event_fnl, nw2022_bongo_event_fnl, shim2022_bongo_metadata_fnl)
+
+IYS2022_bongo_event <- IYS2022_bongo_event %>%
+  mutate(footprintWKT = paste("POINT", " (", IYS2022_bongo_event$decimalLongitude, " ", IYS2022_bongo_event$decimalLatitude, ")"))
+
+coordinates <- obistools::calculate_centroid(IYS2022_bongo_event$footprintWKT) %>% select(coordinateUncertaintyInMeters)
+
+IYS2022_bongo_event <- cbind(IYS2022_bongo_event, coordinates)
 
 # Remove NAs from the dataframe:
-tinro2022_bongo_event[is.na(tinro2022_bongo_event)] <- ""
-tinro2022_bongo_event <- as.data.frame(tinro2022_bongo_event)
+IYS2022_bongo_event[is.na(IYS2022_bongo_event)] <- ""
+IYS2022_bongo_event <- as.data.frame(IYS2022_bongo_event)
 
 # Save as .csv file
-write_csv(tinro2022_bongo_event, here("standardized_data", "tinro2022_bongo_event.csv"))
+write_csv(IYS2022_bongo_event, here("standardized_data", "IYS2022_bongo_event.csv"))
 ```
 
-Next, create the occurrence extension:
+Next, create the occurrence extensions - and then combine these. First the bongo occurrence data from the Shimada & NW Explorer:
 
 ```{r occurrence extension, eval = FALSE}
+nw2022_bongo_occ <- nw2022_bongo_event %>%
+  mutate(occurrenceID = paste(eventID, row_number(), sep = "-"),
+         occurrenceStatus = "present",
+         preparations = "Formalin")
 
+shim2022_bongo_occ <- shim2022_bongo_event %>%
+  mutate(occurrenceID = paste(eventID, row_number(), sep = "-"),
+         occurrenceStatus = "present", 
+         preparations = "Formalin")
+
+# Combine these data frames:
+shim_nw_bongo_occ <- rbind(nw2022_bongo_occ, shim2022_bongo_occ)
+  
+# Standardize data to Darwin Core:
+shim_nw_bongo_occ <- shim_nw_bongo_occ %>%
+  rename(verbatimIdentification = species_recorded)
+
+# From the scientific_name column, remove 'SP.' and 'SP.' to begin with:
+shim_nw_bongo_occ$scientific_name <- gsub("\\b SP.\\b|\\b SP.\\b|\\b SP\\b", "", shim_nw_bongo_occ$scientific_name) 
+
+# Remove any special characters (punctuation, brackets etc)
+shim_nw_bongo_occ$scientific_name <- gsub("[[:punct:]]", "", shim_nw_bongo_occ$scientific_name)
+
+# Finally, remove any references to lifestage or sex from the scientific_name column, as this information is captured in separate columns already:
+shim_nw_bongo_occ$scientific_name <- gsub(" LARVAE| JUVENILES| FURCILIA| NURSE| MEDIUM| SMALL| EXTRA SMALL| NAUPLII| ZOEA| CALYPTOPIS|
+                                          AF| AM| V$| IV| III| II| I$", "", shim_nw_bongo_occ$scientific_name)
+
+manual_check <- shim_nw_bongo_occ %>% select(scientific_name, verbatimIdentification) %>% distinct()
+
+# scientific names are all capitalized. Change this from e.g. CYPHOCARIS CHALLENGERI to Cyphocaris challengeri:
+shim_nw_bongo_occ$scientific_name <- tolower(shim_nw_bongo_occ$scientific_name)
+shim_nw_bongo_occ$scientific_name <- Hmisc::capitalize(shim_nw_bongo_occ$scientific_name)
+
+# Check accuracy of scientific names:
+worms_id <- worrms::wm_records_names(unique(shim_nw_bongo_occ$scientific_name), marine_only = FALSE) %>% dplyr::bind_rows() %>% rename(scientific_name = scientificname)
+
+# Find out which species are not found in the WoRMS database:
+no_worms_id <- left_join(shim_nw_bongo_occ, worms_id, by = "scientific_name") %>% filter(is.na(AphiaID)) %>% distinct(scientific_name)
+
+#TODO: 7 names have to be changed to match WoRMS accepted names. These have to be changed in the original data table
+shim_nw_bongo_occ$scientific_name <- gsub("Fish", "Pisces", shim_nw_bongo_occ$scientific_name)
+shim_nw_bongo_occ$scientific_name <- gsub("Metridia ochotensis", "Metridia okhotensis", shim_nw_bongo_occ$scientific_name)
+shim_nw_bongo_occ$scientific_name <- gsub("Neocalanus flemingeriplumchrus", "Neocalanus", shim_nw_bongo_occ$scientific_name)
+shim_nw_bongo_occ$scientific_name <- gsub("Squid", "Teuthida", shim_nw_bongo_occ$scientific_name)
+shim_nw_bongo_occ$scientific_name <- gsub("Gastropoda echinospira", "Gastropoda", shim_nw_bongo_occ$scientific_name)
+shim_nw_bongo_occ$scientific_name <- gsub("Siphonophora bracts", "Siphonophorae", shim_nw_bongo_occ$scientific_name)
+shim_nw_bongo_occ$scientific_name <- gsub("Oithona copepodids", "Oithona", shim_nw_bongo_occ$scientific_name)
+
+# As we have now changed all the names in the original dataframe to fit the entries in the WoRMS database registry, we can use wm_records_names() again to find all the taxonomic information. 
+shim_nw_bongo_worms_id <- worrms::wm_records_names(unique(shim_nw_bongo_occ$scientific_name), marine_only = FALSE) %>%
+  dplyr::bind_rows() %>% rename(scientific_name = scientificname)
+
+# After manual inspection, there are some AphiaIDs that need to be removed, as the species is listed multiple times.
+shim_nw_bongo_worms_id <- filter(shim_nw_bongo_worms_id, !(AphiaID %in% c("534090", "254409", "999078")))
+
+shim_nw_bongo_occ <- left_join(shim_nw_bongo_occ, shim_nw_bongo_worms_id, by = "scientific_name") 
+
+shim_nw_bongo_final <- shim_nw_bongo_occ %>%
+  select(verbatimIdentification, 
+         lifeStage = lifestage, 
+         sex, eventID, 
+         individualCount = catch_count,
+         organismQuantity = abundance_m3,
+         scientificName = scientific_name,
+         taxonomicAuthority = authority,
+         taxonomicStatus = status,
+         taxonomicRank = rank,
+         kingdom, phylum, class, order, family, genus, 
+         scientificNameID = lsid,
+         occurrenceID, occurrenceStatus, preparations) %>%
+  mutate(specificEpithet = stringr::word(scientificName, 2),
+         organismQuantityType = "individuals per cubic meter")
+
+# Remove NAs from the dataframe:
+shim_nw_bongo_final[is.na(shim_nw_bongo_final)] <- ""
+shim_nw_bongo_final <- as.data.frame(shim_nw_bongo_final)
+```
+
+Next, the Bongo data collected by the TINRO: 
+
+```{r TINRO bongo}
 tinro2022_bongo_counts <- tinro2022_bongo_data[-c(1:4, 149:295),]
 tinro2022_bongo_abund <- tinro2022_bongo_data[-c(1:151),]
 
@@ -218,15 +379,21 @@ tinro2022_bongo_final <- tinro2022_bongo_occ %>%
 # Remove NAs from the dataframe:
 tinro2022_bongo_final[is.na(tinro2022_bongo_final)] <- ""
 tinro2022_bongo_final <- as.data.frame(tinro2022_bongo_final)
+```
+
+Combine these occurrence extensions into a single dataframe and save locally:
+
+```{r IYS2022 bongo}
+IYS2022_bongo_final <- plyr::rbind.fill(shim_nw_bongo_final, tinro2022_bongo_final)
 
 # Save as .csv file
-write_csv(tinro2022_bongo_final, here("standardized_data", "tinro2022_bongo_occ.csv"))
+write_csv(IYS2022_bongo_final, here("standardized_data", "IYS2022_bongo_occ.csv"))
 ```
 
 We want to standardize the data as well for the IYS Data Template. To put it in that format, combine the Event Core and occurrence extension and select and rename the correct columns:
 
 ```{r IYS Template, eval = FALSE}
-bongo2022_template <- left_join(tinro2022_bongo_event, tinro2022_bongo_final, by = "eventID") %>%
+bongo2022_template <- left_join(IYS2022_bongo_event, IYS2022_bongo_final, by = "eventID") %>%
   select(station_event_id = eventID,
          catch_id = occurrenceID,
          species_recorded = verbatimIdentification,
@@ -325,15 +492,14 @@ bongo2022_bottomdepth <- tinro2022_bongo_event %>%
   pivot_longer(cols = Depth_m,
                names_to = "measurementType",
                values_to = "measurementValue") %>%
-  mutate(
-    measurementType = recode(measurementType,
+  mutate(measurementType = recode(measurementType,
                                  Depth_m = "bottom_depth"),
-    measurementID = paste(eventID, measurementType, sep = "-")) %>%
+         measurementID = paste(eventID, measurementType, sep = "-")) %>%
   mutate(measurementTypeID = case_when(
     measurementType == "bottom_depth" ~ "http://vocab.nerc.ac.uk/collection/C00/current/SCILOG/"),
-        measurementUnit = case_when(
+         measurementUnit = case_when(
     measurementType == "bottom_depth" ~ "meter"),
-        measurementUnitID = case_when(
+         measurementUnitID = case_when(
     measurementUnit == "meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/ULAA/"),
     measurementValueID = NA) %>%
   select(eventID, measurementID, measurementType, measurementTypeID, measurementValue, measurementValueID,
@@ -494,7 +660,8 @@ bongo2022_emof_fnl <- bongo2022_emof_fnl %>%
       measurementValue == "egg" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1122/",
       measurementValue == "nauplii" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1130/",
       measurementValue == "cal" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1118/",
-      measurementValue == "larvae" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1128/"),
+      measurementValue == "larvae" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1128/",
+      measurementValue == "Megalopa" ~ "https://vocab.nerc.ac.uk/collection/S11/current/S1167/"),
     measurementRemarks = NA) %>%
   drop_na(measurementValue)
 
