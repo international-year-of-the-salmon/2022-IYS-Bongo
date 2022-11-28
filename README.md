@@ -1,8 +1,8 @@
 ## Hi there 👋
 
-🙋 Welcome to the repository for the zooplankton data collected with a Bongo net from the R/V TINRO collected in 2022 as part of the International Year of the Salmon High Seas Expedition.
+🙋 Welcome to the repository for the zooplankton data collected with a Bongo net from the R/V TINRO, NOAA Bell M. Shimada and F/V Northwest Explorer collected in 2022 as part of the International Year of the Salmon High Seas Expedition.
 
-🤖 See the metadata record for this dataset here: 
+🤖 See the metadata record for this dataset here: https://doi.org/10.21966/ymv6-8024
 
 🐟 The repository is structured as follows: 
   * `original_data` contains processed data files that have been sent to the IYS Data Scientists that have not been formatted to the IYS Data Template.
