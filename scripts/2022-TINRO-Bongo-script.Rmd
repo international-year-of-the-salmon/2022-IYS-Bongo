@@ -39,7 +39,7 @@ nw2022_bongo_data <- read_excel(here("IYS_data_template", "IYS2022_Shimada_NW_Zo
 shim2022_bongo_data <- read_excel(here("IYS_data_template", "IYS2022_Shimada_NW_Zooplankton.xlsx"), sheet = "Shimada-Bongo-Taxonomy")
 ```
 
-Create Event Core:
+Create Event Core from the TINRO, NW Explorer and Shimada metadata:
 
 ``` {r event core, eval = FALSE}
 tinro2022_bongo_event <- tinro2022_bongo_metadata %>%
@@ -101,7 +101,7 @@ nw2022_bongo_metadata_2 <- nw2022_bongo_metadata %>%
     eventDate = paste(eventDate_start, eventDate_finish, sep = "/"))
 
 # Bind these rows again:
-nw2022_bongo_metadata <- rbind(nw2022_bongo_metadata_2, nw2022_bongo_metadata_1) 
+nw2022_bongo_metadata <- plyr::rbind.fill(nw2022_bongo_metadata_2, nw2022_bongo_metadata_1) 
 
 nw2022_bongo_event_fnl  <- nw2022_bongo_metadata %>% 
   select(eventID, eventDate, Year, Month, Day,
@@ -156,6 +156,12 @@ IYS2022_bongo_event <- cbind(IYS2022_bongo_event, coordinates)
 IYS2022_bongo_event[is.na(IYS2022_bongo_event)] <- ""
 IYS2022_bongo_event <- as.data.frame(IYS2022_bongo_event)
 
+# Add language, modified and license columns:
+IYS2022_bongo_event <- IYS2022_bongo_event %>%
+  mutate(language = "en",
+         modified = lubridate::today(),
+         license = "https://creativecommons.org/licenses/by/4.0/legalcode")
+
 # Save as .csv file
 write_csv(IYS2022_bongo_event, here("standardized_data", "IYS2022_bongo_event.csv"))
 ```
@@ -163,34 +169,41 @@ write_csv(IYS2022_bongo_event, here("standardized_data", "IYS2022_bongo_event.cs
 Next, create the occurrence extensions - and then combine these. First the bongo occurrence data from the Shimada & NW Explorer:
 
 ```{r occurrence extension, eval = FALSE}
-nw2022_bongo_occ <- nw2022_bongo_event %>%
-  mutate(occurrenceID = paste(eventID, row_number(), sep = "-"),
+nw2022_bongo_occ <- nw2022_bongo_data %>%
+  mutate(eventID = paste(station_event_id, net_number, sep = "-"),
+         occurrenceID = paste(eventID, row_number(), sep = "-"),
          occurrenceStatus = "present",
          preparations = "Formalin")
 
-shim2022_bongo_occ <- shim2022_bongo_event %>%
-  mutate(occurrenceID = paste(eventID, row_number(), sep = "-"),
+shim2022_bongo_occ <- shim2022_bongo_data %>%
+  mutate(eventID = paste(station_event_id, net_number, sep = "-"),
+         occurrenceID = paste(eventID, row_number(), sep = "-"),
          occurrenceStatus = "present", 
          preparations = "Formalin")
 
 # Combine these data frames:
 shim_nw_bongo_occ <- rbind(nw2022_bongo_occ, shim2022_bongo_occ)
   
-# Standardize data to Darwin Core:
+# Standardize columns to Darwin Core:
 shim_nw_bongo_occ <- shim_nw_bongo_occ %>%
   rename(verbatimIdentification = species_recorded)
 
-# From the scientific_name column, remove 'SP.' and 'SP.' to begin with:
-shim_nw_bongo_occ$scientific_name <- gsub("\\b SP.\\b|\\b SP.\\b|\\b SP\\b", "", shim_nw_bongo_occ$scientific_name) 
+# Add 'Bracts' to lifestage column for Siphonophora bracts occurrences:
+shim_nw_bongo_occ$lifestage <- ifelse(grepl("BRACTS", shim_nw_bongo_occ$scientific_name), "bracts", lifestage)
+
+# From the scientific_name column, create identificationQualifier column, then remove 'SP.', and add 'sp. indet' for Neocalanus Flemingeri/plumchrus:
+shim_nw_bongo_occ$identificationQualifier <- ifelse(grepl("\\b SP.\\b|\\b SP\\b", shim_nw_bongo_occ$scientific_name), "sp. indet.", NA)
+shim_nw_bongo_occ$identificationQualifier <- ifelse(grepl("NEOCALANUS FLEMINGERI/PLUMCHRUS", shim_nw_bongo_occ$scientific_name), 
+                                                    "sp. indet.", shim_nw_bongo_occ$identificationQualifier)
+shim_nw_bongo_occ$scientific_name <- gsub("\\b SP.\\b|\\b SP\\b", "", shim_nw_bongo_occ$scientific_name) 
 
 # Remove any special characters (punctuation, brackets etc)
 shim_nw_bongo_occ$scientific_name <- gsub("[[:punct:]]", "", shim_nw_bongo_occ$scientific_name)
 
 # Finally, remove any references to lifestage or sex from the scientific_name column, as this information is captured in separate columns already:
-shim_nw_bongo_occ$scientific_name <- gsub(" LARVAE| JUVENILES| FURCILIA| NURSE| MEDIUM| SMALL| EXTRA SMALL| NAUPLII| ZOEA| CALYPTOPIS|
-                                          AF| AM| V$| IV| III| II| I$", "", shim_nw_bongo_occ$scientific_name)
+shim_nw_bongo_occ$scientific_name <- gsub(" LARVAE| JUVENILES| FURCILIA| BRACTS| NURSE| MEDIUM| SMALL| EXTRA SMALL| NAUPLII| ZOEA| CALYPTOPIS| AF| AM| V$| IV| III| II| I$", "", shim_nw_bongo_occ$scientific_name)
 
-manual_check <- shim_nw_bongo_occ %>% select(scientific_name, verbatimIdentification) %>% distinct()
+manual_check <- shim_nw_bongo_occ %>% select(scientific_name, verbatimIdentification, sex, lifestage, identificationQualifier) %>% distinct()
 
 # scientific names are all capitalized. Change this from e.g. CYPHOCARIS CHALLENGERI to Cyphocaris challengeri:
 shim_nw_bongo_occ$scientific_name <- tolower(shim_nw_bongo_occ$scientific_name)
@@ -202,7 +215,7 @@ worms_id <- worrms::wm_records_names(unique(shim_nw_bongo_occ$scientific_name), 
 # Find out which species are not found in the WoRMS database:
 no_worms_id <- left_join(shim_nw_bongo_occ, worms_id, by = "scientific_name") %>% filter(is.na(AphiaID)) %>% distinct(scientific_name)
 
-#TODO: 7 names have to be changed to match WoRMS accepted names. These have to be changed in the original data table
+# 7 names have to be changed to match WoRMS accepted names. These have to be changed in the original data table
 shim_nw_bongo_occ$scientific_name <- gsub("Fish", "Pisces", shim_nw_bongo_occ$scientific_name)
 shim_nw_bongo_occ$scientific_name <- gsub("Metridia ochotensis", "Metridia okhotensis", shim_nw_bongo_occ$scientific_name)
 shim_nw_bongo_occ$scientific_name <- gsub("Neocalanus flemingeriplumchrus", "Neocalanus", shim_nw_bongo_occ$scientific_name)
@@ -216,6 +229,7 @@ shim_nw_bongo_worms_id <- worrms::wm_records_names(unique(shim_nw_bongo_occ$scie
   dplyr::bind_rows() %>% rename(scientific_name = scientificname)
 
 # After manual inspection, there are some AphiaIDs that need to be removed, as the species is listed multiple times.
+# TODO: Confirm with Aleksei this is correct.
 shim_nw_bongo_worms_id <- filter(shim_nw_bongo_worms_id, !(AphiaID %in% c("534090", "254409", "999078")))
 
 shim_nw_bongo_occ <- left_join(shim_nw_bongo_occ, shim_nw_bongo_worms_id, by = "scientific_name") 
@@ -232,7 +246,7 @@ shim_nw_bongo_final <- shim_nw_bongo_occ %>%
          taxonomicRank = rank,
          kingdom, phylum, class, order, family, genus, 
          scientificNameID = lsid,
-         occurrenceID, occurrenceStatus, preparations) %>%
+         occurrenceID, occurrenceStatus, preparations, identificationQualifier) %>%
   mutate(specificEpithet = stringr::word(scientificName, 2),
          organismQuantityType = "individuals per cubic meter")
 
@@ -241,7 +255,7 @@ shim_nw_bongo_final[is.na(shim_nw_bongo_final)] <- ""
 shim_nw_bongo_final <- as.data.frame(shim_nw_bongo_final)
 ```
 
-Next, the Bongo data collected by the TINRO: 
+Next, the Bongo data collected by the TINRO, which is provided in a different format: 
 
 ```{r TINRO bongo}
 tinro2022_bongo_counts <- tinro2022_bongo_data[-c(1:4, 149:295),]
@@ -261,16 +275,19 @@ tinro2022_bongo_occ <- left_join(tinro2022_bongo_counts, tinro2022_bongo_abund)
 
 tinro2022_bongo_occ$station <- as.numeric(tinro2022_bongo_occ$station)
 tinro2022_bongo_occ <- tinro2022_bongo_occ[order(tinro2022_bongo_occ$station),]
+tinro2022_bongo_occ <- tinro2022_bongo_occ %>% rename(verbatimIdentification = `Station No`)
+```
 
-# Parse out `Stage/length` column into two separate columns:
+In the _Stage/length_ column, size ranges, sex and lifestages are sometimes included. We need to parse these out and include them in separate columns. If numerical values are included, these need to be included in a `size_range` column. If sex is included in the scientific name (i.e. 'AF' for adult female), include this in column `sex`. Lifestage, such as 'adult' (A) need to be included in `lifeStage` column.
+
+```{r TINRO bongo cont}
 tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
-  mutate(size_range = ifelse(grepl("\\d+", `Stage/length`), `Stage/length`, NA), # if numerics are included, this needs to be included in a separate column (size_range)
-         `Stage/length` = ifelse(grepl("\\d+", `Stage/length`), NA, `Stage/length`), # Remove any size ranges from the `Stage/length` column
-         sex = ifelse(grepl("F", `Stage/length`), "female", # If `Stage/length` includes an 'F' (i.e. AF), this implies female
-                      ifelse(grepl("M", `Stage/length`), "male", NA)), # If `Stage/length` includes an 'M' (i.e. AM) this implies male
-         `Stage/length` = ifelse(grepl("A", `Stage/length`), "Adult", `Stage/length`)) %>% # any `Stage/lengths` that include 'A' have to be changed to Adult.
-  rename(lifeStage = `Stage/length`,
-         verbatimIdentification = `Station No`) %>%
+  mutate(size_range = ifelse(grepl("\\d+", `Stage/length`), `Stage/length`, NA), 
+         `Stage/length` = ifelse(grepl("\\d+", `Stage/length`), NA, `Stage/length`),
+         sex = ifelse(grepl("F", `Stage/length`), "female", 
+                      ifelse(grepl("M", `Stage/length`), "male", NA)), 
+         `Stage/length` = ifelse(grepl("A", `Stage/length`), "Adult", `Stage/length`)) %>% 
+  rename(lifeStage = `Stage/length`) %>%
   mutate(eventID = paste("IYS2022", "TINRO", "3", station, "Bongo", "1", sep = "-"))
 
 # Size (ranges) in the verbatimIdentification should also be included in the size_range column
@@ -284,16 +301,24 @@ tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
 tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
   mutate(lifeStage = ifelse(grepl("larvae", verbatimIdentification), "larvae", lifeStage),
          lifeStage = ifelse(grepl("juv.", verbatimIdentification), "juvenile", lifeStage),
-         lifeStage = ifelse(grepl("egg", verbatimIdentification), "egg", lifeStage))
+         lifeStage = ifelse(grepl("fur", size_range), "furcilia", lifeStage),
+         lifeStage = ifelse(grepl("egg", verbatimIdentification), "egg", lifeStage),
+         lifeStage = ifelse(grepl("Crytoniscid", verbatimIdentification), "crytoniscid larva", lifeStage),
+         lifeStage = ifelse(grepl("Microniscid", verbatimIdentification), "microniscid larva", lifeStage))
 
 # Create column 'identificationQualifier' to indicate uncertainty in species classification:
 tinro2022_bongo_occ$identificationQualifier <- ifelse(grepl("\\b sp.|spp.", tinro2022_bongo_occ$verbatimIdentification), "sp. indet.", NA)
+tinro2022_bongo_occ$identificationQualifier <- ifelse(grepl("Neocalanus plumchrus/flemmingi", tinro2022_bongo_occ$verbatimIdentification),
+                                                      "sp. indet.", tinro2022_bongo_occ$identificationQualifier)
 
 # Next, duplicate the verbatimIdentification column so that we can make changes where necessary to the scientific names based on the WoRMS Registry:
 tinro2022_bongo_occ$scientific_name <- tinro2022_bongo_occ$verbatimIdentification
 
 # From this duplicated column, remove 'sp.' and 'spp.' to begin with;
-tinro2022_bongo_occ$scientific_name <- gsub("\\b sp.\\b|spp.", "", tinro2022_bongo_occ$scientific_name) 
+tinro2022_bongo_occ$scientific_name <- gsub("\\b sp.\\b|\\b spp.\\b|\\b SP.\\b", "", tinro2022_bongo_occ$scientific_name) 
+
+# Manual check to see if those changes have been made correctly:
+manual_check <- tinro2022_bongo_occ %>% select(scientific_name, verbatimIdentification, sex, lifeStage, identificationQualifier, size_range) %>% distinct()
 
 # Remove any special characters (punctuation, brackets etc)
 tinro2022_bongo_occ$scientific_name <- gsub("[[:punct:]]", "", tinro2022_bongo_occ$scientific_name)
@@ -304,7 +329,7 @@ worms_id <- worrms::wm_records_names(unique(tinro2022_bongo_occ$scientific_name)
 # Find out which species are not found in the WoRMS database:
 no_worms_id <- left_join(tinro2022_bongo_occ, worms_id, by = "scientific_name") %>% filter(is.na(AphiaID)) %>% distinct(scientific_name)
 
-#TODO: 34 names have to be changed to match WoRMS accepted names. These have to be changed in the original data table (tinro2022_bongo_occ)
+# 34 names have to be changed to match WoRMS accepted names. These have to be changed in the original data table (tinro2022_bongo_occ)
 tinro2022_bongo_occ$scientific_name <- gsub("Scolethricella minor", "Scolecithricella minor", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Scolethricella ovata", "Scolecithricella ovata", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Neocalanus plumchrusflemmingi", "Neocalanus", tinro2022_bongo_occ$scientific_name)
@@ -323,8 +348,8 @@ tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa spinifer", "Thysanoessa 
 tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa inermis", "Thysanoessa inermis", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa longipes", "Thysanoessa longipes", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Chionocetes", "Chionoecetes", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Crytoniscid parasitic isopod larvae", " ", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Microniscid parasitic isopod larvae", " ", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Crytoniscid parasitic isopod larvae", "Isopoda", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Microniscid parasitic isopod larvae", "Isopoda", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Polycheata", "Polychaeta", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Tyroscrolex leafy stick", " ", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Limiacina helicina", "Limacina helicina", tinro2022_bongo_occ$scientific_name)
@@ -337,8 +362,8 @@ tinro2022_bongo_occ$scientific_name <- gsub("Siphonophore bract", "Siphonophora"
 tinro2022_bongo_occ$scientific_name <- gsub("Jelly fragments", "Cnidaria", tinro2022_bongo_occ$scientific_name) #TODO: Confirm this is correct
 tinro2022_bongo_occ$scientific_name <- gsub("Fish egg", "Pisces", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Fish larvae", "Pisces", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Brozoan cyphonautes", " ", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Pumkin boy unknown critter could be sea anemone larvae", " ", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Brozoan cyphonautes", "Bryozoa", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Pumkin boy unknown critter could be sea anemone larvae", "Zoanthidea", tinro2022_bongo_occ$scientific_name) # As per A. Pinchuk
 
 # As we have now changed all the names in the original dataframe to fit the entries in the WoRMS database registry, we can use wm_records_names() again to find all the taxonomic information. 
 tinro2022_bongo_worms_id <- worrms::wm_records_names(unique(tinro2022_bongo_occ$scientific_name), marine_only = FALSE) %>%
@@ -352,8 +377,6 @@ unique_taxa <- as.data.frame(unique(tinro2022_bongo_occ$scientific_name))
 names(unique_taxa)[1] <- "scientific_name"
 temp_taxa <- left_join(unique_taxa, tinro2022_bongo_worms_id) %>% filter(is.na(AphiaID)) # should be empty.
 print(temp_taxa)
-
-#TODO: Find a solution for species that no WoRMS LSID can be found for: 'Crytoniscid parasitic isopod larvae', 'Microniscid parasitic isopod larvae', 'Tyroscrolex leafy stick', 'Jelly fragments' and 'Brozoan cyphonautes' and 'Pumkin boy unknown critter could be sea anemone larvae'. 
 
 tinro2022_bongo_occ <- left_join(tinro2022_bongo_occ, tinro2022_bongo_worms_id, by = "scientific_name") %>%
   group_by(eventID) %>%
@@ -384,10 +407,23 @@ tinro2022_bongo_final <- as.data.frame(tinro2022_bongo_final)
 Combine these occurrence extensions into a single dataframe and save locally:
 
 ```{r IYS2022 bongo}
-IYS2022_bongo_final <- plyr::rbind.fill(shim_nw_bongo_final, tinro2022_bongo_final)
+IYS2022_bongo_final <- plyr::rbind.fill(shim_nw_bongo_final, tinro2022_bongo_final) %>% as.data.frame()
+
+# Replace N/A with blanks in the sex and lifestage column:
+IYS2022_bongo_final$lifeStage <- stringr::str_replace_all(IYS2022_bongo_final$lifeStage, "[[:punct:]]", "")
+IYS2022_bongo_final$lifeStage <- gsub("NA", "", IYS2022_bongo_final$lifeStage)
+
+IYS2022_bongo_final$sex <- stringr::str_replace(IYS2022_bongo_final$sex, "[[:punct:]]", "")
+IYS2022_bongo_final$sex <- gsub("NA", "", IYS2022_bongo_final$sex)
 
 # Save as .csv file
 write_csv(IYS2022_bongo_final, here("standardized_data", "IYS2022_bongo_occ.csv"))
+
+# I will also generate a small occ file with the unique species occurrences, to manually check that I've made the necessary changes:
+occ_manual_check <- IYS2022_bongo_final %>%
+  select(verbatimIdentification, scientificName, sex, lifeStage, identificationQualifier) %>% distinct()
+
+write_csv(occ_manual_check, here("standardized_data", "occ_manual_check.csv"))
 ```
 
 We want to standardize the data as well for the IYS Data Template. To put it in that format, combine the Event Core and occurrence extension and select and rename the correct columns:
@@ -607,11 +643,11 @@ bongo2022_emof_fnl$length_type <- ifelse(grepl("shell", bongo2022_emof_fnl$maxim
 bongo2022_emof_fnl$maximumLength <- gsub("[[:punct:]]", "", bongo2022_emof_fnl$maximumLength)
 bongo2022_emof_fnl$maximumLength <- gsub(" shell length", "", bongo2022_emof_fnl$maximumLength)
 
-#Rremove 'fur' from minimumLength and add it to lifeStage column (assuming fur = fucilia)
+#Remove 'fur' from minimumLength and add it to lifeStage column
 bongo2022_emof_fnl$lifeStage <- ifelse(grepl("fur", bongo2022_emof_fnl$minimumLength), "furcilia", bongo2022_emof_fnl$lifeStage)
 bongo2022_emof_fnl$minimumLength <- gsub("fur", "", bongo2022_emof_fnl$minimumLength)
 
-# Remove 'lar' from size_range and add it to lifeStage column (assuming lar = larvae)
+# Remove 'lar' from size_range and add it to lifeStage column
 bongo2022_emof_fnl$lifeStage <- ifelse(grepl("lar", bongo2022_emof_fnl$size_range), "larvae", bongo2022_emof_fnl$lifeStage)
 bongo2022_emof_fnl$size_range <- gsub("lar", "", bongo2022_emof_fnl$size_range)
 
@@ -624,7 +660,6 @@ bongo2022_emof_fnl$size_range <- extract_numeric(bongo2022_emof_fnl$size_range)
 So then finally the eMOF:
 
 ```{r emof cont., eval = FALSE}
-
 bongo2022_emof_fnl <- bongo2022_emof_fnl %>%
   mutate_all(as.character) %>%
   pivot_longer(cols = lifeStage:length_type,
@@ -670,9 +705,6 @@ bongo2022_tinro_emof <- bind_rows(bongo2022_bottomdepth, bongo2022_sampling, bon
 # Make sure the folder path exists already (e.g. ./Bongo/tidy_data)
 write_csv(bongo2022_tinro_emof, here("standardized_data", "bongo2022_tinro_emof.csv"))
 ```
-
-
-
 
 
 
