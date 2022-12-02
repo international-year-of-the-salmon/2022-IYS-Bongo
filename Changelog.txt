@@ -1,0 +1,25 @@
+# Changelog for 2022 IYS Bongo Data
+
+All notable changes to the IYS2022_Shimada_NW_Zooplankton.xlsx or '7-14 2022 Bongo Logbook-TINRO_clean.xlsx will be documented in this file.
+These are the two original input files for the standardized 2022 Bongo data record.
+
+The changes made between versions / releases are documented below.
+
+## Notes:
+
+The '7-14 2022 Bongo Logbook-TINRO_clean.xlsx' is not provided in the Data Template format, and stored in the folder 'original_data'.
+The file 'IYS2022_Shimada_NW_Zooplankton.xlsx' is provided in the Data Template format and stored in the folder 'IYS_data_template'.
+
+The files 'IYS2022_Shimada_NW_Zooplankton.xlsx' and '7-14 2022 Bongo Logbook-TINRO_clean.xlsx' continue to be the files that contain the latest version received from the data provider.
+
+## [Unreleased] 2022-12-02
+
+### Changed
+File: IYS2022_Shimada_NW_Zooplankton.xlsx:
+- For station_event_id: IYS2022-NW-2-11-Bongo, species: ACARTIA LONGIREMIS AM, the sex has been changed from F to M. As per A. Pinchuk: "the recorded species takes priority".
+- For station_event_id: IYS2022-NW-2-11-Bongo, species: AETIDUS PACIFICUS AF, the sex has been changed from M to F. As per A. Pinchuk: "the recorded species takes priority".
+- For station_event_id: IYS2022-Shimada-4-21-Bongo, species: Paraeuchata elongata V, the lifestage has been changed from C4 to C5.
+
+### Added
+
+### Removed

@@ -188,9 +188,6 @@ shim_nw_bongo_occ <- rbind(nw2022_bongo_occ, shim2022_bongo_occ)
 shim_nw_bongo_occ <- shim_nw_bongo_occ %>%
   rename(verbatimIdentification = species_recorded)
 
-# Add 'Bracts' to lifestage column for Siphonophora bracts occurrences:
-shim_nw_bongo_occ$lifestage <- ifelse(grepl("BRACTS", shim_nw_bongo_occ$scientific_name), "bracts", lifestage)
-
 # From the scientific_name column, create identificationQualifier column, then remove 'SP.', and add 'sp. indet' for Neocalanus Flemingeri/plumchrus:
 shim_nw_bongo_occ$identificationQualifier <- ifelse(grepl("\\b SP.\\b|\\b SP\\b", shim_nw_bongo_occ$scientific_name), "sp. indet.", NA)
 shim_nw_bongo_occ$identificationQualifier <- ifelse(grepl("NEOCALANUS FLEMINGERI/PLUMCHRUS", shim_nw_bongo_occ$scientific_name), 
@@ -221,6 +218,7 @@ shim_nw_bongo_occ$scientific_name <- gsub("Metridia ochotensis", "Metridia okhot
 shim_nw_bongo_occ$scientific_name <- gsub("Neocalanus flemingeriplumchrus", "Neocalanus", shim_nw_bongo_occ$scientific_name)
 shim_nw_bongo_occ$scientific_name <- gsub("Squid", "Teuthida", shim_nw_bongo_occ$scientific_name)
 shim_nw_bongo_occ$scientific_name <- gsub("Gastropoda echinospira", "Gastropoda", shim_nw_bongo_occ$scientific_name)
+shim_nw_bongo_occ$scientific_name <- gsub("Siphonophora", "Siphonophorae", shim_nw_bongo_occ$scientific_name)
 shim_nw_bongo_occ$scientific_name <- gsub("Siphonophora bracts", "Siphonophorae", shim_nw_bongo_occ$scientific_name)
 shim_nw_bongo_occ$scientific_name <- gsub("Oithona copepodids", "Oithona", shim_nw_bongo_occ$scientific_name)
 
@@ -229,8 +227,7 @@ shim_nw_bongo_worms_id <- worrms::wm_records_names(unique(shim_nw_bongo_occ$scie
   dplyr::bind_rows() %>% rename(scientific_name = scientificname)
 
 # After manual inspection, there are some AphiaIDs that need to be removed, as the species is listed multiple times.
-# TODO: Confirm with Aleksei this is correct.
-shim_nw_bongo_worms_id <- filter(shim_nw_bongo_worms_id, !(AphiaID %in% c("534090", "254409", "999078")))
+shim_nw_bongo_worms_id <- filter(shim_nw_bongo_worms_id, !(AphiaID %in% c("534090", "999078")))
 
 shim_nw_bongo_occ <- left_join(shim_nw_bongo_occ, shim_nw_bongo_worms_id, by = "scientific_name") 
 
@@ -332,6 +329,8 @@ no_worms_id <- left_join(tinro2022_bongo_occ, worms_id, by = "scientific_name") 
 # 34 names have to be changed to match WoRMS accepted names. These have to be changed in the original data table (tinro2022_bongo_occ)
 tinro2022_bongo_occ$scientific_name <- gsub("Scolethricella minor", "Scolecithricella minor", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Scolethricella ovata", "Scolecithricella ovata", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Gaetanus intermedius", "Gaetanus simplex", tinro2022_bongo_occ$scientific_name) # As per A. Pinchuk
+tinro2022_bongo_occ$scientific_name <- gsub("Siphonophora", "Siphonophorae", tinro2022_bongo_occ$scientific_name) # As per A. Pinchuk
 tinro2022_bongo_occ$scientific_name <- gsub("Neocalanus plumchrusflemmingi", "Neocalanus", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Eucheata elongata", "Euchaeta elongata", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Candacia columbia", "Candacia columbiae", tinro2022_bongo_occ$scientific_name)
@@ -358,7 +357,7 @@ tinro2022_bongo_occ$scientific_name <- gsub("Eukronia hamata", "Eukrohnia hamata
 tinro2022_bongo_occ$scientific_name <- gsub("Sagitta scrippae  larger transparent fellow", "Sagitta scrippsae", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Oikopluera", "Oikopleura", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Fritilaria", "Fritillaria", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Siphonophore bract", "Siphonophora", tinro2022_bongo_occ$scientific_name)
+tinro2022_bongo_occ$scientific_name <- gsub("Siphonophore bract", "Siphonophorae", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Jelly fragments", "Cnidaria", tinro2022_bongo_occ$scientific_name) #TODO: Confirm this is correct
 tinro2022_bongo_occ$scientific_name <- gsub("Fish egg", "Pisces", tinro2022_bongo_occ$scientific_name)
 tinro2022_bongo_occ$scientific_name <- gsub("Fish larvae", "Pisces", tinro2022_bongo_occ$scientific_name)
@@ -370,7 +369,7 @@ tinro2022_bongo_worms_id <- worrms::wm_records_names(unique(tinro2022_bongo_occ$
   dplyr::bind_rows() %>% rename(scientific_name = scientificname)
 
 # After manual inspection, there are some AphiaIDs that need to be removed, as the species is listed multiple times.
-tinro2022_bongo_worms_id <- filter(tinro2022_bongo_worms_id, !(AphiaID %in% c("534090", "254409", "503291")))
+tinro2022_bongo_worms_id <- filter(tinro2022_bongo_worms_id, !(AphiaID %in% c("534090", "835292", "503291")))
 
 # Check to see if we missed any:
 unique_taxa <- as.data.frame(unique(tinro2022_bongo_occ$scientific_name))
