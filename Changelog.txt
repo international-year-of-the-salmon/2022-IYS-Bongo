@@ -23,3 +23,5 @@ File: IYS2022_Shimada_NW_Zooplankton.xlsx:
 ### Added
 
 ### Removed
+File: IYS2022_NW_Data (contains metadata associated with the sampling event)
+- In the tab: "Sampling_Event_Info", removed row for the failed Bongo cast at station 13 (IYS2022-NW-2-13) as this had resulted in a duplicate station_event_id. 
