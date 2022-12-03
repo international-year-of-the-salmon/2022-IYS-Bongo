@@ -418,6 +418,9 @@ IYS2022_bongo_final$sex <- gsub("NA", "", IYS2022_bongo_final$sex)
 # Add basisOfRecord (required):
 IYS2022_bongo_final$basisOfRecord <- "HumanObservation"
 
+# For now, remove the individualCount, organismQuantity and organismQuantityType columns until approved for publication:
+IYS2022_bongo_final <- IYS2022_bongo_final %>% select(-c("individualCount", "organismQuantity", "organismQuantityType"))
+
 # Save as .csv file
 write_csv(IYS2022_bongo_final, here("standardized_data", "IYS2022_bongo_occ.csv"))
 
