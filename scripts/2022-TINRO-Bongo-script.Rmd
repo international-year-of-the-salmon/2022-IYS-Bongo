@@ -69,8 +69,16 @@ tinro2022_bongo_event_fnl <- tinro2022_bongo_event %>%
          minimumDepthInMeters,
          maximumDepthInMeters = `Wire out_m`,
          sampleSizeValue = `Vol filtered (m^3)`,
-         eventRemarks = Notes,
-         samplingEffort, sampleSizeUnit, geodeticDatum)
+         fieldNotes = Notes,
+         samplingEffort, sampleSizeUnit, geodeticDatum,
+         eventRemarks = `D/N`)
+
+tinro2022_bongo_event_fnl <- tinro2022_bongo_event_fnl %>%
+  mutate(eventRemarks = case_when(
+    eventRemarks == "D" ~ "Sampling event occurred during the day.",
+    eventRemarks == "E" ~ "Sampling event occurred during the evening.",
+    eventRemarks == "M" ~ "Sampling event occurred during the morning.",
+    eventRemarks == "N" ~ "Sampling event occurred during the night."))
 
 # For F/V Northwest Explorer:
 nw2022_bongo_metadata <- nw2022_bongo_metadata %>% filter(Event_Type == "Bongo") %>%
@@ -79,7 +87,8 @@ nw2022_bongo_metadata <- nw2022_bongo_metadata %>% filter(Event_Type == "Bongo")
          geodeticDatum = "WGS84",
          sampleSizeValue = 70.65,
          samplingEffort = "volume seawater filtered",
-         sampleSizeUnit = "cubic meters")
+         sampleSizeUnit = "cubic meters",
+         eventRemarks = "")
 
 nw2022_bongo_metadata <- nw2022_bongo_metadata %>%
   mutate(Time_Start = as.POSIXct(Time_Start, format = "%H:%M:%S"),
@@ -110,8 +119,9 @@ nw2022_bongo_event_fnl  <- nw2022_bongo_metadata %>%
          minimumDepthInMeters,
          maximumDepthInMeters = Maximum_Sampling_Depth,
          sampleSizeValue,
-         eventRemarks = Comments,
-         samplingEffort, sampleSizeUnit, geodeticDatum) 
+         fieldNotes = Comments,
+         samplingEffort, sampleSizeUnit, geodeticDatum,
+         eventRemarks) 
 
 # For NOAA Bell M. Shimada:
 shim2022_bongo_metadata <- shimada2022_bongo_metadata %>% filter(Event_Type == "Bongo") %>%
@@ -140,8 +150,15 @@ shim2022_bongo_metadata_fnl  <- shim2022_bongo_metadata %>%
          minimumDepthInMeters,
          maximumDepthInMeters = Maximum_Sampling_Depth_Meters,
          sampleSizeValue,
-         eventRemarks = Comments,
-         samplingEffort, sampleSizeUnit, geodeticDatum) 
+         fieldNotes = Comments,
+         samplingEffort, sampleSizeUnit, geodeticDatum,
+         eventRemarks = Day_Night) 
+
+shim2022_bongo_metadata_fnl <- shim2022_bongo_metadata_fnl %>%
+  mutate(eventRemarks = case_when(
+    eventRemarks == "Day" ~ "Sampling event occurred during the day.",
+    eventRemarks == "Night" ~ "Sampling event occurred during the night."))
+
 
 IYS2022_bongo_event <- rbind(tinro2022_bongo_event_fnl, nw2022_bongo_event_fnl, shim2022_bongo_metadata_fnl)
 
@@ -160,7 +177,8 @@ IYS2022_bongo_event <- as.data.frame(IYS2022_bongo_event)
 IYS2022_bongo_event <- IYS2022_bongo_event %>%
   mutate(language = "en",
          modified = lubridate::today(),
-         license = "https://creativecommons.org/licenses/by/4.0/legalcode")
+         license = "https://creativecommons.org/licenses/by/4.0/legalcode",
+         informationWithheld = "Contact data provider for information on abundance, sizes and biomass.")
 
 # Save as .csv file
 write_csv(IYS2022_bongo_event, here("standardized_data", "IYS2022_bongo_event.csv"))
@@ -388,6 +406,7 @@ tinro2022_bongo_final <- tinro2022_bongo_occ %>%
   select(verbatimIdentification, lifeStage, sex, eventID, identificationQualifier, 
          individualCount = counts,
          organismQuantity = `ind/m3`,
+         size_range,
          scientificName = scientific_name,
          taxonomicAuthority = authority,
          taxonomicStatus = status,
@@ -419,21 +438,95 @@ IYS2022_bongo_final$sex <- gsub("NA", "", IYS2022_bongo_final$sex)
 IYS2022_bongo_final$basisOfRecord <- "HumanObservation"
 
 # For now, remove the individualCount, organismQuantity and organismQuantityType columns until approved for publication:
-IYS2022_bongo_final <- IYS2022_bongo_final %>% select(-c("individualCount", "organismQuantity", "organismQuantityType"))
+IYS2022_bongo_occ <- IYS2022_bongo_final %>% select(-c("individualCount", "organismQuantity", "organismQuantityType", "size_range"))
 
 # Save as .csv file
-write_csv(IYS2022_bongo_final, here("standardized_data", "IYS2022_bongo_occ.csv"))
+write_csv(IYS2022_bongo_occ, here("standardized_data", "IYS2022_bongo_occ.csv"))
 
 # I will also generate a small occ file with the unique species occurrences, to manually check that I've made the necessary changes:
-occ_manual_check <- IYS2022_bongo_final %>%
+occ_manual_check <- IYS2022_bongo_occ %>%
   select(verbatimIdentification, scientificName, sex, lifeStage, identificationQualifier) %>% distinct()
 
 write_csv(occ_manual_check, here("standardized_data", "occ_manual_check.csv"))
 ```
 
-We want to standardize the data as well for the IYS Data Template. To put it in that format, combine the Event Core and occurrence extension and select and rename the correct columns:
+We want to standardize the data as well for the IYS Data Template. To this end, we'll have to include the metadata in the _Sampling Events_ sheet, and specimen data in _Bongo Specimen Data_. To put it in that format, combine the Event Core and occurrence extension and select and rename the correct columns:
 
 ```{r IYS Template, eval = FALSE}
+bongo2022_sampling_event <- IYS2022_bongo_event %>%
+   mutate(cruise_name = "IYS2022",
+          dataset_doi = "https://doi.org/10.21966/ymv6-8024",
+         vessel_name_abbr = case_when(
+           grepl("TINRO", IYS2022_bongo_event$eventID) ~ "TINRO",
+           grepl("NW", IYS2022_bongo_event$eventID) ~ "NW",
+           grepl("Shimada", IYS2022_bongo_event$eventID) ~ "Shimada"),
+         zone = stringr::str_match(IYS2022_bongo_event$eventID, '([^-]+)(?:-[^-]+){3}$')[,2],
+         station = stringr::str_match(IYS2022_bongo_event$eventID, '([^-]+)(?:-[^-]+){2}$')[,2],
+         event_type = "Bongo",
+         time_zone_code = "UTC",
+         event_date = as.Date(paste(Year,Month,Day, sep = "-")),
+         time_start = gsub("/.*$", "", eventDate),
+         time_start = lubridate::ymd_hms(time_start),
+         time_start = format(time_start, format = "%H:%M:%S"),
+         time_end = gsub(".*/", "", eventDate),
+         time_end = lubridate::ymd_hms(time_end),
+         time_end = format(time_end, format = "%H:%M:%S"),
+         day_night = case_when(
+           grepl("day", IYS2022_bongo_event$eventRemarks) ~ "Day",
+           grepl("night", IYS2022_bongo_event$eventRemarks) ~ "Night"),
+         day_of_year = lubridate::yday(event_date))
+
+# Create some dummy columns:
+bongo2022_sampling_event <- bongo2022_sampling_event %>%
+  mutate(alternative_event_id = "",
+         tow_speed_kilometers_per_hour = "",
+         latitude_end_decdeg = "",
+         longitude_end_decdeg = "",
+         bottom_depth_meters = "",
+         wind_direction_degrees = "",
+         wind_speed_kilometers_per_hour = "",
+         wave_height_meters = "",
+         swell_height_meters = "",
+         weather_description = "",
+         comments = "")
+
+#TODO: Code chunk below is horrible and needs fixing.
+bongo2022_sampling_event <- bongo2022_sampling_event %>%
+  mutate(time_end = ifelse(time_end == time_start, NA, time_end),
+         sampling_duration_minutes = with(bongo2022_sampling_event, 
+                                          difftime(as.POSIXct(bongo2022_sampling_event$time_start, format = "%H:%M:%S"), 
+                                                   as.POSIXct(bongo2022_sampling_event$time_end, format = "%H:%M:%S"), 
+                                                   units = "mins")),
+         sampling_duration_minutes = round(sampling_duration_minutes, digits = 0),
+         sampling_duration_minutes = sampling_duration_minutes*-1,
+         sampling_duration_minutes = as.numeric(sampling_duration_minutes))
+
+bongo2022_sampling_event <- bongo2022_sampling_event %>%
+    select(cruise_name, vessel_name_abbr, zone, station, event_type, station_event_id = eventID, alternative_event_id, event_date, 
+           year = Year,
+           month = Month,
+           day = Day,
+           time_start, time_end, sampling_duration_minutes, day_night, time_zone_code, 
+           minimum_sampling_depth_meters = minimumDepthInMeters,
+           maximum_sampling_depth_meters = maximumDepthInMeters,
+           tow_speed_kilometers_per_hour,
+           latitude_start_decdeg = decimalLatitude,
+           longitude_start_decdeg = decimalLongitude,
+           latitude_end_decdeg, longitude_end_decdeg, bottom_depth_meters, wind_direction_degrees, wind_speed_kilometers_per_hour,
+           wave_height_meters, swell_height_meters, weather_description, comments, day_of_year, dataset_doi)
+
+col_order <- c("cruise_name", "vessel_name_abbr", "zone", "station", "event_type", "station_event_id", "alternative_event_id", "event_date",
+               "year", "month", "day", "time_start", "time_end", "sampling_duration_minutes", "day_night", "time_zone_code",
+               "minimum_sampling_depth_meters", "maximum_sampling_depth_meters", "tow_speed_kilometers_per_hour", "latitude_start_decdeg",
+               "longitude_start_decdeg", "latitude_end_decdeg", "longitude_end_decdeg", "bottom_depth_meters", "wind_direction_degrees",
+               "wind_speed_kilometers_per_hour", "wave_height_meters", "swell_height_meters", "weather_description", "comments",
+               "day_of_year", "dataset_doi")
+bongo2022_sampling_event <- bongo2022_sampling_event[, col_order]
+
+# Save locally:
+write_csv(bongo2022_sampling_event, here("IYS_data_template", "Bongo_Sampling_Event.csv"))
+
+# Create Bongo Specimen Data:
 bongo2022_template <- left_join(IYS2022_bongo_event, IYS2022_bongo_final, by = "eventID") %>%
   select(station_event_id = eventID,
          catch_id = occurrenceID,
@@ -442,6 +535,7 @@ bongo2022_template <- left_join(IYS2022_bongo_event, IYS2022_bongo_final, by = "
          taxonomic_rank = taxonomicRank,
          lifestage = lifeStage,
          sex,
+         size_range,
          preservation_method = preparations,
          catch_count = individualCount,
          abundance_m3 = organismQuantity,
@@ -454,7 +548,7 @@ bongo2022_template <- left_join(IYS2022_bongo_event, IYS2022_bongo_final, by = "
          date_identified = "",
          count_method = "Total", #TODO: confirm this
          depth_volume_filtered_m3 = "",
-         comments = "") #TODO: this could be 'occurrenceRemarks'
+         comments = "") #TODO: this could be 'eventRemarks'
 
 # Drop rows where abundance_m3 is 0
 bongo2022_template <- bongo2022_template %>% filter(!abundance_m3 == 0)
@@ -466,8 +560,9 @@ sf <- sf[-c(1:6),]
 
 # Select species column
 sf_species <- sf[, 1]
+colnames(sf_species)[1] <- "species_recorded"
 
-# Select only the columns where `total counted per split` is NA, as these columns depict the proportion size fractionated:
+# Select only the columns where `total counted per split` is NA, as these columns depict 1) the lifestage (col #1) and 2) the proportion size fractionated:
 col_odd <- seq_len(ncol(sf)) %% 2
 sf <- sf[ , col_odd == 0]
 
@@ -496,7 +591,7 @@ new_sf <- new_sf %>%
                       ifelse(grepl("M", `Stage/length`), "male", NA)), 
          `Stage/length` = ifelse(grepl("A", `Stage/length`), "Adult", `Stage/length`)) %>% 
   rename(lifestage = `Stage/length`) %>%
-  select(species_recorded, lifestage, prop_sf_proc, station_event_id, sex)
+  select(species_recorded, lifestage, prop_sf_proc, station_event_id, sex, size_range)
 
 # Lifestages in the verbatimidentification should also be included in the lifeStage column:
 new_sf <- new_sf %>%
@@ -509,16 +604,27 @@ new_sf[is.na(new_sf)] <- ""
 new_sf <- as.data.frame(new_sf)
 
 # Integrate within the IYS Data Template:
-bongo2022_template <- left_join(bongo2022_template, new_sf, by = c("species_recorded", "station_event_id", "lifestage", "sex"))
+bongo2022_template <- left_join(bongo2022_template, new_sf, by = c("species_recorded", "station_event_id", "lifestage", "sex", "size_range"))
 
-col_order <- c("station_event_id", "net_number", "catch_id", "species_recorded", "scientific_name", "taxonomic_rank", "prop_total_sample", "sf_proc", "prop_sf_proc",
-               "lifestage", "sex", "common_name", "identified_by", "date_identified", "preservation_method", "catch_count", "count_method", "abundance_m3",
-               "flowmeter_volume_filtered_m3", "depth_volume_filtered_m3", "comments")
+col_order <- c("station_event_id", "net_number", "catch_id", "species_recorded", "scientific_name", "taxonomic_rank", "prop_total_sample",
+               "sf_proc", "prop_sf_proc", "lifestage", "sex", "common_name", "identified_by", "date_identified", "preservation_method",
+               "catch_count", "size_range", "count_method", "abundance_m3", "flowmeter_volume_filtered_m3", "depth_volume_filtered_m3",
+               "comments")
 bongo2022_template <- bongo2022_template[, col_order]
 
 # Save locally:
-write_csv(bongo2022_template, here("IYS_data_template", "IYS2022_Bongo.csv"))
+write_csv(bongo2022_template, here("IYS_data_template", "Bongo_Specimen_Data.csv"))
 ```
+
+Read these two data tables into a single IYS Zooplankton Template workbook:
+
+```{r}
+library(xlsx)
+write.xlsx(bongo2022_sampling_event, file="IYS2022_Zooplankton_Template.xlsx", sheetName="Sampling_Events", row.names=FALSE)
+write.xlsx(bongo2022_template, file="IYS2022_Zooplankton_Template.xlsx", sheetName="Bongo_Specimen_Data", append=TRUE,
+           row.names=FALSE)
+```
+
 
 Finally, develop the extended measurements or facts extensions and combine them.
 
