@@ -8,9 +8,20 @@ The changes made between versions / releases are documented below.
 ## Notes:
 
 The '7-14 2022 Bongo Logbook-TINRO_clean.xlsx' is not provided in the Data Template format, and stored in the folder 'original_data'.
+The '2022002 IYS Franklin abund biomass by species n life stage .xlsx' is not provided in the Data Template format, and stored in the folder 'original_data'. 
 The file 'IYS2022_Shimada_NW_Zooplankton.xlsx' is provided in the Data Template format and stored in the folder 'IYS_data_template'.
 
-The files 'IYS2022_Shimada_NW_Zooplankton.xlsx' and '7-14 2022 Bongo Logbook-TINRO_clean.xlsx' continue to be the files that contain the latest version received from the data provider.
+The files 'IYS2022_Shimada_NW_Zooplankton.xlsx', '2022002 IYS Franklin abund biomass by species n life stage .xlsx' and '7-14 2022 Bongo Logbook-TINRO_clean.xlsx' continue to be the files that contain the latest version received from the data provider.
+
+## [released: version 1.0] 2023-05-01
+
+### Changed
+- With the addition of the Franklin zooplankton data the script has been changed to include that information and standardize it.
+
+### Added
+- Zooplankton data information for the Franklin has been added to the original_data folder, file: 2022002 IYS Franklin abund biomass by species n life stage .xlsx
+
+### Removed
 
 ## [Unreleased] 2022-12-02
 
