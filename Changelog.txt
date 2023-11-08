@@ -13,6 +13,7 @@ The file 'IYS2022_Shimada_NW_Zooplankton.xlsx' is provided in the Data Template 
 
 The files 'IYS2022_Shimada_NW_Zooplankton.xlsx', '2022002 IYS Franklin abund biomass by species n life stage .xlsx' and '7-14 2022 Bongo Logbook-TINRO_clean.xlsx' continue to be the files that contain the latest version received from the data provider.
 
+<<<<<<< HEAD
 ## [ ... ] 2023-09-25
 
 ### Changed
@@ -26,6 +27,9 @@ The files 'IYS2022_Shimada_NW_Zooplankton.xlsx', '2022002 IYS Franklin abund bio
 ## [Unreleased] 2023-05-01
 
 Recommended citation at the time of this unreleased version is: Pakhomov, E., Pinchuk, A., & Stark, C. (2022). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada and F/V Northwest Explorer during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition. North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024
+=======
+## [released: version 1.0] 2023-05-01
+>>>>>>> 6d9f1551570fb5cabc5b2e1b3e3894b89b304634
 
 ### Changed
 - With the addition of the Franklin zooplankton data the script has been changed to include that information and standardize it.
