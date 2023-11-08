@@ -8,9 +8,32 @@ The changes made between versions / releases are documented below.
 ## Notes:
 
 The '7-14 2022 Bongo Logbook-TINRO_clean.xlsx' is not provided in the Data Template format, and stored in the folder 'original_data'.
+The '2022002 IYS Franklin abund biomass by species n life stage .xlsx' is not provided in the Data Template format, and stored in the folder 'original_data'. 
 The file 'IYS2022_Shimada_NW_Zooplankton.xlsx' is provided in the Data Template format and stored in the folder 'IYS_data_template'.
 
-The files 'IYS2022_Shimada_NW_Zooplankton.xlsx' and '7-14 2022 Bongo Logbook-TINRO_clean.xlsx' continue to be the files that contain the latest version received from the data provider.
+The files 'IYS2022_Shimada_NW_Zooplankton.xlsx', '2022002 IYS Franklin abund biomass by species n life stage .xlsx' and '7-14 2022 Bongo Logbook-TINRO_clean.xlsx' continue to be the files that contain the latest version received from the data provider.
+
+## [ ... ] 2023-09-25
+
+### Changed
+- With the addition of the Franklin zooplankton data the recommended citation is: Breckenridge, J., Galbraith, M., King, J., Pakhomov, E., Pinchuk, A., & Stark, C. (2022). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada, F/V Northwest Explorer and R/V CCGS Sir John Franklin during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition (v1.0). North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024
+
+### Added
+
+### Removed
+
+
+## [Unreleased] 2023-05-01
+
+Recommended citation at the time of this unreleased version is: Pakhomov, E., Pinchuk, A., & Stark, C. (2022). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada and F/V Northwest Explorer during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition. North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024
+
+### Changed
+- With the addition of the Franklin zooplankton data the script has been changed to include that information and standardize it.
+
+### Added
+- Zooplankton data information for the Franklin has been added to the original_data folder, file: 2022002 IYS Franklin abund biomass by species n life stage .xlsx
+
+### Removed
 
 ## [Unreleased] 2022-12-02
 
