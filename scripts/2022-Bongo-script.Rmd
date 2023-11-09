@@ -402,7 +402,9 @@ tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
          sex = ifelse(verbatimIdentification == "Clausocalanus sp. , 1.5mm  tiny 5th leg AF voucher", "female", sex))
 
 # Create column 'identificationQualifier' to indicate uncertainty in species classification:
-tinro2022_bongo_occ$identificationQualifier <- ifelse(grepl("\\b sp.|spp.", tinro2022_bongo_occ$verbatimIdentification), "sp. indet.", NA)
+tinro2022_bongo_occ$identificationQualifier <- ifelse(grepl("\\b sp.\\b|\\b spp.\\b|\\b sp. \\b", tinro2022_bongo_occ$verbatimIdentification), "sp. indet.", NA)
+tinro2022_bongo_occ$identificationQualifier <- ifelse(tinro2022_bongo_occ$verbatimIdentification == "Clausocalanus sp. - really small, 0.5mm  tiny 5th leg AF voucher", "sp. indet.", tinro2022_bongo_occ$identificationQualifier)
+tinro2022_bongo_occ$identificationQualifier <- ifelse(tinro2022_bongo_occ$verbatimIdentification == "Clausocalanus sp. , 1.5mm  tiny 5th leg AF voucher", "sp. indet.", tinro2022_bongo_occ$identificationQualifier)
 tinro2022_bongo_occ$identificationQualifier <- ifelse(grepl("Neocalanus plumchrus/flemmingi", tinro2022_bongo_occ$verbatimIdentification), "sp. indet.", tinro2022_bongo_occ$identificationQualifier)
 
 # Next, duplicate the verbatimIdentification column so that we can make changes where necessary to the scientific names based on the WoRMS Registry:
@@ -706,7 +708,7 @@ IYS2022_bongo_final <- IYS2022_bongo_final %>%
 
 #TODO: Make some changes as per Joanne Breckenridge September 28, 2023:
 IYS2022_bongo_final <- IYS2022_bongo_final %>%
-  mutate(lifeStage = ifelse(grepl("bract|BRACTS", verbatimIdentification), "zooid", lifeStage),
+  mutate(lifeStage = ifelse(grepl("bract|BRACTS", verbatimIdentification), "polygastric", lifeStage),
          lifeStage = ifelse(grepl("trich", verbatimIdentification), "trochophore", lifeStage),
          lifeStage = ifelse(grepl("old nurse", verbatimIdentification), "nurse", lifeStage),
          lifeStage = ifelse(grepl("cyphonautes", verbatimIdentification), "cyphonautes", lifeStage),
@@ -757,6 +759,7 @@ IYS2022_bongo_final <- IYS2022_bongo_final %>%
 IYS2022_bongo_occ <- IYS2022_bongo_final %>% select(-c("individualCount", "organismQuantity", "organismQuantityType", "size_range", "Station"))
 
 # Save as .csv file
+IYS2022_bongo_occ[is.na(IYS2022_bongo_occ)] <- ""
 write_csv(IYS2022_bongo_occ, here("standardized_data", "IYS2022_bongo_occ.csv"))
 
 # I will also generate a small occ file with the unique species occurrences, to manually check that I've made the necessary changes:
