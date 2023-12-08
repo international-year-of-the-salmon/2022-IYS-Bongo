@@ -30,16 +30,17 @@ download.file("https://github.com/international-year-of-the-salmon/2022-NW-Data-
 ## Read in files:
 
 ``` {r read_file, warning = FALSE}
-tinro2022_bongo_metadata <- read_excel(here("original_data", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "Bongo metadata")
+tinro2022_bongo_metadata <- read_excel(here("original_data", "archived", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "Bongo metadata")
 shimada2022_bongo_metadata <- read_excel(here("IYS_data_template", "IYS2022_Shimada_data.xlsx"), sheet = "4. SAMPLING EVENT INFO")
 nw2022_bongo_metadata <- read_excel(here("IYS_data_template", "IYS2022_NW_Data.xlsx"), sheet = "Sampling_Event_Info")
-franklin2022_bongo_meta <- read_excel(here("original_data", "2022002 IYS Franklin abund biomass by species n life stage .xlsx"), sheet = "metadata")
+franklin2022_bongo_meta <- read_excel(here("original_data", "archived", "2022002 IYS Franklin abund biomass by species n life stage .xlsx"), sheet = "metadata")
 
+IYS2022_occ <- read.csv(here("original_data", "IYS_Standardized_Zoop_Taxa_Abundance_2022.csv"))
 
-tinro2022_bongo_data <- read_excel(here("original_data", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "zoop counts")
-nw2022_bongo_data <- read_excel(here("IYS_data_template", "IYS2022_Shimada_NW_Zooplankton.xlsx"), sheet = "NWExplorer-Bongo-Taxonomy")
-shim2022_bongo_data <- read_excel(here("IYS_data_template", "IYS2022_Shimada_NW_Zooplankton.xlsx"), sheet = "Shimada-Bongo-Taxonomy")
-franklin2022_bongo_data <- read_excel(here("original_data", "2022002 IYS Franklin abund biomass by species n life stage .xlsx"), sheet = "abund biomass")
+# tinro2022_bongo_data <- read_excel(here("original_data", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "zoop counts")
+# nw2022_bongo_data <- read_excel(here("IYS_data_template", "IYS2022_Shimada_NW_Zooplankton.xlsx"), sheet = "NWExplorer-Bongo-Taxonomy")
+# shim2022_bongo_data <- read_excel(here("IYS_data_template", "IYS2022_Shimada_NW_Zooplankton.xlsx"), sheet = "Shimada-Bongo-Taxonomy")
+# franklin2022_bongo_data <- read_excel(here("original_data", "2022002 IYS Franklin abund biomass by species n life stage .xlsx"), sheet = "abund biomass")
 ```
 
 Standardize the metadata into Darwin Core and create the Event Core from the TINRO, NW Explorer, Shimada and Franklin metadata:
@@ -129,6 +130,9 @@ nw2022_bongo_event_fnl  <- nw2022_bongo_metadata %>%
          fieldNotes = Comments,
          samplingEffort, sampleSizeUnit, geodeticDatum,
          eventRemarks) 
+
+# There was one bad tow that results in a duplicate eventID - remove this:
+nw2022_bongo_event_fnl <- nw2022_bongo_event_fnl[!grepl("Bad tow", nw2022_bongo_event_fnl$fieldNotes),]
 
 # For NOAA Bell M. Shimada:
 shim2022_bongo_metadata <- shimada2022_bongo_metadata %>% filter(Event_Type == "Bongo") %>%
@@ -228,7 +232,181 @@ IYS2022_bongo_event <- IYS2022_bongo_event %>%
 write_csv(IYS2022_bongo_event, here("standardized_data", "IYS2022_bongo_event.csv"))
 ```
 
-Next, create the occurrence extensions - and then combine these. First the bongo occurrence data from the Shimada & NW Explorer:
+Next, create the occurrence extensions:
+
+```{r}
+IYS2022_occ <- IYS2022_occ %>%
+  select(Taxon, sex = Sex, 
+         lifeStage = Dev_stage, 
+         verbatimIdentification = original_id, eventID, Abundance_m3) %>%
+  filter(Abundance_m3 != 0.00000)
+
+IYS2022_occ$sex[IYS2022_occ$sex == "F"] <- "Female"
+IYS2022_occ$sex[IYS2022_occ$sex == "M"] <- "Male"
+
+# Add additional columns required or highly recommended for Darwin Core:
+IYS2022_occ <- IYS2022_occ %>%
+  mutate(basisOfRecord = "HumanObservation",
+         occurrenceStatus = "present",
+         preparations = "formalin",
+         occurrenceID = paste(eventID, row_number(), sep = "-"),
+         identificationRemarks = NA)
+
+IYS2022_occ$verbatimIdentification <- tolower(IYS2022_occ$verbatimIdentification)
+IYS2022_occ$verbatimIdentification <- Hmisc::capitalize(IYS2022_occ$verbatimIdentification)
+IYS2022_occ$scientific_name <- IYS2022_occ$verbatimIdentification
+
+# Remove lifestages, sizes and identificationQualifier from scientific_name
+IYS2022_occ$scientific_name <- gsub(" larvae| juveniles| juv| furcilia| bracts| nurse| medium| small| extra small| nauplii| zoea| calyptopis| am| aff| af| v$| iv| iii| ii| i$", "", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("\\(old\\)|\\(small\\)|\\(medium\\)|\\(extra\\)", "", IYS2022_occ$scientific_name)
+
+IYS2022_occ <- IYS2022_occ %>%
+  mutate(identificationQualifier = ifelse(grepl("\\b sp.\\b|\\b spp.\\b|\\b sp. \\b", IYS2022_occ$scientific_name), "sp. indet.", NA),
+         identificationQualifier = ifelse(grepl(" aff", IYS2022_occ$scientific_name), "sp. aff.", identificationQualifier),
+         identificationQualifier = ifelse(grepl("Neocalanus plumchrus/flemingeri|Neocalanus flemingeri/plumchrus", IYS2022_occ$scientific_name), "sp. indet.", identificationQualifier))
+
+IYS2022_occ <- IYS2022_occ %>%
+  mutate(identificationRemarks = ifelse(grepl("Limacina helicina acuta", verbatimIdentification), 
+                                        "Morphotype: acuta", identificationRemarks))
+
+IYS2022_occ <- IYS2022_occ %>%
+  mutate(lifeStage = ifelse(grepl("trich", scientific_name), "trochophore", IYS2022_occ$lifeStage))
+IYS2022_occ$lifeStage[IYS2022_occ$verbatimIdentification == "Siphonophore bract"] <- "polygastric"
+IYS2022_occ$lifeStage[IYS2022_occ$verbatimIdentification == "Siphonophora bracts"] <- "polygastric"
+
+# Size (ranges) in the scientific_name should be removed
+IYS2022_occ$scientific_name <-  gsub("0.5mm", "", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <-  gsub("1.5mm", "", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <-  gsub("2.5mm", "", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <-  gsub("1mm", "", IYS2022_occ$scientific_name) 
+
+IYS2022_occ$scientific_name <- trimws(IYS2022_occ$scientific_name, "r")
+
+IYS2022_occ$scientific_name <- gsub("\\b sp.\\b|\\b spp.\\b", "", IYS2022_occ$scientific_name)
+
+# Add lifestage for Crytoniscid and Microniscid:
+IYS2022_occ <- IYS2022_occ %>%
+  mutate(lifeStage = ifelse(IYS2022_occ$verbatimIdentification == "Crytoniscid", "crytoniscid larva", lifeStage),
+         lifeStage = ifelse(IYS2022_occ$verbatimIdentification == "Microniscid", "microniscid larva", lifeStage))
+
+# Match to WoRMS:
+unique_spp <- IYS2022_occ %>% select(scientific_name) %>% unique() %>% as.data.frame()
+worms_1 <- worrms::wm_records_names(unique_spp$scientific_name[1:115], marine_only = F) %>% dplyr::bind_rows() %>% rename(scientific_name = scientificname)
+worms_2 <- worrms::wm_records_names(unique_spp$scientific_name[116:230], marine_only = F) %>% dplyr::bind_rows() %>% rename(scientific_name = scientificname)
+worms <- rbind(worms_1, worms_2)
+
+# Find out which species are not found in the WoRMS database:
+no_worms_id <- left_join(IYS2022_occ, worms, by = "scientific_name") %>% filter(is.na(AphiaID)) %>% distinct(scientific_name)
+
+# Make changes manually as needed to 29 identified taxa:
+IYS2022_occ$scientific_name <- gsub("Siphonophora", "Siphonophorae", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Siphonophore bract", "Siphonophorae", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Conchoecia rudjakovi", "Conchoecia rudyakovi", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Conchoecinae", "Conchoeciinae", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Oikopleura labradoriensis", "Oikopleura (Vexillaria) labradoriensis", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Limacina helicina acuta", "Limacina helicina", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("\\bEpicarid\\b", "Epicaridea", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("\\bDoliolid\\b", "Doliolidae", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Fish", "Pisces", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Oikopleura longicauda", "Oikopleura (Coecaria) longicauda", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Neocalanus plumchrus/flemingeri", "Neocalanus", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Neocalanus flemingeri/plumchrus", "Neocalanus", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Thysanoesa inspinata", "Thysanoessa inspinata", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Thysanoesa spinifer", "Thysanoessa spinifera", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Thysanoesa inermis", "Thysanoessa inermis", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Thysanoesa longipes", "Thysanoessa longipes", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Chionocetes", "Chionoecetes", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Crytoniscid", "Isopoda", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Microniscid", "Isopoda", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Polycheata", "Polychaeta", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Tyroscrolex maybe", "Animalia", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Squid", "Teuthida", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Eukronia hamata", "Eukrohnia hamata", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Mesocalanus teniucornus", "Mesocalanus tenuicornis", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Acartia longirmis", "Acartia longiremis", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Sagitta scrippae", "Sagitta scrippsae", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Gastropoda. trich", "Gastropoda", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Gastropoda \\(echinospira\\)", "Echinospira", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Oithona sp. copepodids", "Oithona", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Metridia ochotensis", "Metridia okhotensis", IYS2022_occ$scientific_name)
+IYS2022_occ$scientific_name <- gsub("Gaetanus intermedius", "Gaetanus simplex", IYS2022_occ$scientific_name) # As per A. Pinchuk
+
+# Make sure changes are reflected:
+unique_spp <- IYS2022_occ %>% select(scientific_name) %>% unique() %>% as.data.frame()
+updated_worms_id_1 <- worrms::wm_records_names(unique_spp$scientific_name[1:115], marine_only = FALSE) %>% dplyr::bind_rows() %>% rename(scientific_name = scientificname)
+updated_worms_id_2 <- worrms::wm_records_names(unique_spp$scientific_name[116:230], marine_only = FALSE) %>% dplyr::bind_rows() %>% rename(scientific_name = scientificname)
+updated_worms_id <- rbind(updated_worms_id_1, updated_worms_id_2)
+
+# The following should be an empty data table:
+no_worms_id <- left_join(IYS2022_occ, updated_worms_id, by = "scientific_name") %>% filter(is.na(AphiaID)) %>% distinct(scientific_name)
+
+# Remove AphiaIDs that are incorrect.
+IYS2022_occ_worms <- filter(updated_worms_id, !(AphiaID %in% c("603038", "254409", "410743", "14775", "588510", "835292", "534090", "999078", "503291", "426434"))) %>%
+  select(scientific_name,
+         scientificNameID = lsid,
+         scientificNameAuthorship = authority,
+         taxonomicStatus = status,
+         taxonRank = rank,
+         kingdom, phylum, class, order, family, genus, AphiaID)
+
+IYS2022_occ_final <- left_join(IYS2022_occ, IYS2022_occ_worms, by = "scientific_name") %>%
+  rename(scientificName = scientific_name) %>%
+  mutate(specificEpithet = stringr::word(scientificName, 2),
+         specificEpithet = ifelse(scientificName == "Oikopleura (Vexillaria) labradoriensis", "labradoriensis", specificEpithet),
+         specificEpithet = ifelse(scientificName == "Oikopleura (Coecaria) longicauda", "longicauda", specificEpithet)) %>%
+  mutate(identificationRemarks = ifelse(identificationQualifier == "sp. aff.", 
+                                        "Taxa documented is the closest affiliation to taxa observed, but not the taxa observed.",
+                                        identificationRemarks),
+         identificationRemarks = ifelse(identificationQualifier == "sp. indet.", 
+                                        "Taxa is within this taxonomic rank but cannot be identified further due to life stage, missing body parts or due to the destructive nature of the sampling, preservation and analysis process.", 
+                                        identificationRemarks),
+         identificationRemarks = ifelse(verbatimIdentification == "Tyroscrolex maybe", 
+                                        "Tyroscrolex maybe",
+                                        identificationRemarks),
+         identificationRemarks = ifelse(grepl("Limacina helicina acuta", verbatimIdentification),
+                                        "Morphotype: acuta",
+                                        identificationRemarks),
+         identificationRemarks = ifelse(grepl("Neocalanus plumchrus/flemingeri|Neocalanus flemingeri/plumchrus", IYS2022_occ$scientific_name), 
+                                        "Taxa is within this taxonomic rank and likely either N. flemingeri or N. plumchrus, but cannot be identified further due to life stage, missing body parts or due to the destructive nature of the sampling, preservation and analysis process.", identificationRemarks))
+
+# Remove brackets from the scientificNameAuthorship, then join it to the scientificName following format:
+# <scientificName> (scientificNameAuthorship)
+IYS2022_occ_final <- IYS2022_occ_final %>%
+  mutate(scientificNameAuthorship = str_replace_all(scientificNameAuthorship, "\\(|\\)", ""),
+         scientificNameAuthorship = ifelse(scientificNameAuthorship == "", NA, scientificNameAuthorship)) %>%
+  mutate(scientificName = ifelse(!is.na(scientificNameAuthorship), 
+                                 paste0(scientificName, " (", scientificNameAuthorship, ")"),
+                                 scientificName)) %>%
+  select(-Taxon, -Abundance_m3, -AphiaID)
+
+IYS2022_occ_final[is.na(IYS2022_occ_final)] <- ""
+write_csv(IYS2022_occ_final, here("standardized_data", "IYS2022_zoop_occ_final.csv"))
+```
+
+Run some checks on the event and occurrence data tables:
+
+```{r checks, eval = FALSE}
+# Check if all OBIS required fields are present in occurrence table:
+obistools::check_fields(IYS2022_occ_final) # Only missing eventDate, decimalLongitude and decimalLatitude which are in the event table.
+
+# Plot points on a map to ensure no observations on land:
+obistools::plot_map(IYS2022_bongo_event, zoom = TRUE)
+obistools::check_onland(unlist(lapply(IYS2022_bongo_event, as.numeric)), report = T)
+
+# Check whether all eventIDs are matched:
+obistools::check_extension_eventids(IYS2022_bongo_event, IYS2022_bongo_final)
+
+# Check eventDate
+obistools::check_eventdate(IYS2022_bongo_event)
+
+# Basic quality report:
+obistools::report(unlist(IYS2022_bongo_event))
+
+# Create tree structure -- not very exciting for this data structure
+tree <- treeStructure(IYS2022_bongo_event, IYS2022_bongo_final)
+exportTree(tree, "tree.html")
+
+```
 
 ```{r occurrence extension, eval = FALSE}
 nw2022_bongo_occ <- nw2022_bongo_data %>%
@@ -758,6 +936,15 @@ IYS2022_bongo_final <- IYS2022_bongo_final %>%
 # For now, remove the individualCount, organismQuantity and organismQuantityType columns until approved for publication:
 IYS2022_bongo_occ <- IYS2022_bongo_final %>% select(-c("individualCount", "organismQuantity", "organismQuantityType", "size_range", "Station"))
 
+#TODO: Remove following lines once crosswalk is complete: 
+IYS2022_bongo_final[is.na(IYS2022_bongo_final)] <- ""
+write_csv(IYS2022_bongo_final, here("standardized_data", "IYS2022_bongo_final.csv"))
+```
+
+On November 17, 2023, Joanne Breckenridge sent 2022 standardized files. Making sure the contents are similar:
+
+
+```{r}
 # Save as .csv file
 IYS2022_bongo_occ[is.na(IYS2022_bongo_occ)] <- ""
 write_csv(IYS2022_bongo_occ, here("standardized_data", "IYS2022_bongo_occ.csv"))
