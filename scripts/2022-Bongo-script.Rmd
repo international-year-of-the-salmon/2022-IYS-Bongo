@@ -19,33 +19,28 @@ library(here)
 library(Hmisc)
 ```
 
-Download the latest Data Template for the Shimada and NW Explorer to get the metadata associated with the Bongo tows:
-
-```{r download, eval = FALSE}
-download.file("https://github.com/international-year-of-the-salmon/2022-shimada-data-template/blob/main/IYS2022_Shimada_Data_template.xlsx?raw=true", here::here("IYS_data_template", "IYS2022_Shimada_data.xlsx"), quiet = TRUE, mode = "wb")
-
-download.file("https://github.com/international-year-of-the-salmon/2022-NW-Data-Template/blob/main/IYS2022_NW_Data.xlsx?raw=true", here::here("IYS_data_template", "IYS2022_NW_Data.xlsx"), quiet = TRUE, mode = "wb")
-```
+This .Rmd file describes the workflow to standardize the 2022 zooplankton taxonomy and abundance data from the International Year of the Salmon High Seas Expedition to Darwin Core, to allow publication to the Ocean Biodiversity Information System (OBIS). This file is divided into three sections that describe creating the following data tables: 1) Event Core, 2) occurrence extension and 3) extended measurement or fact extension. The script uses the following data sources:
 
 ## Read in files:
 
 ``` {r read_file, warning = FALSE}
+# For the metadata:
 tinro2022_bongo_metadata <- read_excel(here("original_data", "archived", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "Bongo metadata")
 shimada2022_bongo_metadata <- read_excel(here("IYS_data_template", "IYS2022_Shimada_data.xlsx"), sheet = "4. SAMPLING EVENT INFO")
 nw2022_bongo_metadata <- read_excel(here("IYS_data_template", "IYS2022_NW_Data.xlsx"), sheet = "Sampling_Event_Info")
 franklin2022_bongo_meta <- read_excel(here("original_data", "archived", "2022002 IYS Franklin abund biomass by species n life stage .xlsx"), sheet = "metadata")
 
+# For the data:
 IYS2022_occ <- read.csv(here("original_data", "IYS_Standardized_Zoop_Taxa_Abundance_2022.csv"))
-
-# tinro2022_bongo_data <- read_excel(here("original_data", "7-14 2022 Bongo Logbook-TINRO_clean.xlsx"), sheet = "zoop counts")
-# nw2022_bongo_data <- read_excel(here("IYS_data_template", "IYS2022_Shimada_NW_Zooplankton.xlsx"), sheet = "NWExplorer-Bongo-Taxonomy")
-# shim2022_bongo_data <- read_excel(here("IYS_data_template", "IYS2022_Shimada_NW_Zooplankton.xlsx"), sheet = "Shimada-Bongo-Taxonomy")
-# franklin2022_bongo_data <- read_excel(here("original_data", "2022002 IYS Franklin abund biomass by species n life stage .xlsx"), sheet = "abund biomass")
 ```
 
-Standardize the metadata into Darwin Core and create the Event Core from the TINRO, NW Explorer, Shimada and Franklin metadata:
+## Section 1. Event Core
+
+The 2022 zooplankton data were collected during multiple sampling events, where a paired Bongo net is deployed and retrieved vertically. Given this set up, we standardize the data with an Event data file at its core. This data table will include metadata on the sampling event (date, time, geographic coordinates, sampling effort). We have to make sure that the date/time follows the ISO-8601 standards, and that all sampling events have a unique identifier (eventID) under which the other data files will be nested. The following chunk of code standardizes the metadata from the various vessels:
 
 ``` {r event core, eval = FALSE}
+
+# For the R/V TINRO:
 tinro2022_bongo_event <- tinro2022_bongo_metadata %>%
   select(-`T, surf`) %>%
   mutate(Time = format(`Time, UTC`, "%H:%M:%S"),
@@ -95,6 +90,9 @@ nw2022_bongo_metadata <- nw2022_bongo_metadata %>% filter(Event_Type == "Bongo")
          samplingEffort = "volume seawater filtered",
          sampleSizeUnit = "cubic meters",
          eventRemarks = "")
+
+nw2022_bongo_metadata$Month <- as.numeric(nw2022_bongo_metadata$Month)
+nw2022_bongo_metadata$Day <- as.numeric(nw2022_bongo_metadata$Day)
 
 nw2022_bongo_metadata <- nw2022_bongo_metadata %>%
   mutate(Time_Start = as.POSIXct(Time_Start, format = "%H:%M:%S"),
@@ -206,7 +204,7 @@ franklin2022_bongo_event_fnl <- franklin2022_bongo_meta %>%
          maximumDepthInMeters, sampleSizeValue, fieldNotes, samplingEffort, sampleSizeUnit,
          geodeticDatum, eventRemarks)
 
-
+# Merge all the event tables from the vessels:
 IYS2022_bongo_event <- rbind(tinro2022_bongo_event_fnl, nw2022_bongo_event_fnl, 
                              shim2022_bongo_event_fnl, franklin2022_bongo_event_fnl)
 
@@ -226,19 +224,24 @@ IYS2022_bongo_event <- IYS2022_bongo_event %>%
   mutate(language = "en",
          modified = lubridate::today(),
          license = "https://creativecommons.org/licenses/by/4.0/legalcode",
-         informationWithheld = "Contact data provider for information on abundance, sizes and biomass.")
+         informationWithheld = "Contact data provider for information on abundance, sizes and biomass.",
+         bibliographicCitation = "Breckenridge, J., Galbraith, M., King, J., Pinchuk, A., Stark, C., & Pakhomov, E. (2023). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada, F/V Northwest Explorer and R/V CCGS Sir John Franklin during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition (v1.0) [Data set]. North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024",
+         datasetID = "https://doi.org/10.21966/ymv6-8024")
 
 # Save as .csv file
 write_csv(IYS2022_bongo_event, here("standardized_data", "IYS2022_bongo_event.csv"))
 ```
 
-Next, create the occurrence extensions:
+## Section 2. Occurrence extension
+
+Next, create the occurrence extensions. In the following section we develop an occurrence extension that will be nested under the Event Core. The occurrence extension will have unique occurrenceIDs that are associated with a specific observation of a taxa/lifestage/sex combination at a sampling station. These occurrenceIDs will therefore follow a similar format to the eventIDs and be nested under these IDs. The occurrenceIDs will have data on taxa (identified to the lowest rank practical), developmental stage and sex. The observed taxa are cross referenced to the WoRMS database. For this to happen, some ids have been modified slightly, however the original recording of the taxa has been preserved under _verbatimIdentification_. If any changes are made to the original recording as per the updated version from Joanne Breckenridge (UBC), the previous identification will remain recorded under _previousIdentifications_. 
 
 ```{r}
 IYS2022_occ <- IYS2022_occ %>%
   select(Taxon, sex = Sex, 
          lifeStage = Dev_stage, 
-         verbatimIdentification = original_id, eventID, Abundance_m3) %>%
+         verbatimIdentification = original_id, 
+         eventID, Abundance_m3, Abundance_m2) %>%
   filter(Abundance_m3 != 0.00000)
 
 IYS2022_occ$sex[IYS2022_occ$sex == "F"] <- "Female"
@@ -283,6 +286,36 @@ IYS2022_occ$scientific_name <-  gsub("1mm", "", IYS2022_occ$scientific_name)
 IYS2022_occ$scientific_name <- trimws(IYS2022_occ$scientific_name, "r")
 
 IYS2022_occ$scientific_name <- gsub("\\b sp.\\b|\\b spp.\\b", "", IYS2022_occ$scientific_name)
+
+# Some changes to taxa observations as per Joanne Breckenridge. Previous identifications will remain available in the column `previousIdentifications`:
+IYS2022_occ <- IYS2022_occ %>%
+  mutate(previousIdentifications = dplyr::case_when(
+    IYS2022_occ$verbatimIdentification == "Euchaeta elongata" ~ "Euchaeta elongata",
+    IYS2022_occ$verbatimIdentification == "Euphausiacea nauplii" ~ "Euphausiacea nauplii",
+    IYS2022_occ$verbatimIdentification == "Euphausiacea calyptopis" ~ "Euphausiacea calyptopis",
+    IYS2022_occ$verbatimIdentification == "Euphausiacea" ~ "Euphausiacea",
+    IYS2022_occ$verbatimIdentification == "Euphausiacea spp." ~ "Euphausiacea spp.",
+    IYS2022_occ$verbatimIdentification == "Euphausiacea furcilia" ~ "Euphausiacea furcilia",
+    IYS2022_occ$verbatimIdentification == "Nematoscelis sp. juveniles" ~ "Nematoscelis sp. juveniles",
+    IYS2022_occ$verbatimIdentification == "Scolecithricella ovata" ~ "Scolecithricella ovata",
+    IYS2022_occ$verbatimIdentification == "Nemertina" ~ "Nemertina",
+    IYS2022_occ$verbatimIdentification == "Sagitta elegans" ~ "Sagitta elegans",
+    IYS2022_occ$verbatimIdentification == "Primno macropa" ~ "Primno macropa",
+    IYS2022_occ$verbatimIdentification == "Parathemisto pacifica" ~ "Parathemisto pacifica",
+    IYS2022_occ$verbatimIdentification == "Sagitta scrippae" ~ "Sagitta scrippae",
+    IYS2022_occ$verbatimIdentification == "Pseudosagitta scrippsae" ~ "Pseudosagitta scrippsae",
+    IYS2022_occ$verbatimIdentification == "Scaphocalanus brevicornis" ~ "Scaphocalanus brevicornis"))
+
+IYS2022_occ$verbatimIdentification[IYS2022_occ$verbatimIdentification == 'Euchaeta elongata' ] <- 'Paraeuchaeta elongata'
+IYS2022_occ$verbatimIdentification[IYS2022_occ$verbatimIdentification == "Euphausiacea nauplii" | IYS2022_occ$verbatimIdentification == "Euphausiacea calyptopis" | IYS2022_occ$verbatimIdentification == "Euphausiacea" | IYS2022_occ$verbatimIdentification == "Euphausiacea spp." | IYS2022_occ$verbatimIdentification == "Euphausiacea furcilia" ] <- 'Euphausiidae'
+IYS2022_occ$verbatimIdentification[IYS2022_occ$verbatimIdentification == "Nematoscelis sp. juveniles" ] <- 'Nematoscelis difficilis' #After consult with Moira, only one species in region
+IYS2022_occ$verbatimIdentification[IYS2022_occ$verbatimIdentification == "Scolecithricella ovata" ] <- "Pseudoamallothrix ovata"
+IYS2022_occ$verbatimIdentification[IYS2022_occ$verbatimIdentification == "Nemertina" ] <- "Nemertea"
+IYS2022_occ$verbatimIdentification[IYS2022_occ$verbatimIdentification == "Sagitta elegans" ] <- "Parasagitta elegans"
+IYS2022_occ$verbatimIdentification[IYS2022_occ$verbatimIdentification == "Primno macropa" ] <- "Primno abyssalis"
+IYS2022_occ$verbatimIdentification[IYS2022_occ$verbatimIdentification == "Parathemisto pacifica" ] <- "Themisto pacifica"
+IYS2022_occ$verbatimIdentification[IYS2022_occ$verbatimIdentification == "Pseudosagitta scrippsae" | IYS2022_occ$verbatimIdentification == "Sagitta scrippae" ] <- "Pseudosagitta lyra"
+IYS2022_occ$verbatimIdentification[IYS2022_occ$verbatimIdentification == "Scaphocalanus brevicornis" ] <- "Spinocalanus brevicaudatus"
 
 # Add lifestage for Crytoniscid and Microniscid:
 IYS2022_occ <- IYS2022_occ %>%
@@ -371,27 +404,105 @@ IYS2022_occ_final <- left_join(IYS2022_occ, IYS2022_occ_worms, by = "scientific_
 
 # Remove brackets from the scientificNameAuthorship, then join it to the scientificName following format:
 # <scientificName> (scientificNameAuthorship)
-IYS2022_occ_final <- IYS2022_occ_final %>%
+IYS2022_bongo_occ <- IYS2022_occ_final %>%
   mutate(scientificNameAuthorship = str_replace_all(scientificNameAuthorship, "\\(|\\)", ""),
          scientificNameAuthorship = ifelse(scientificNameAuthorship == "", NA, scientificNameAuthorship)) %>%
   mutate(scientificName = ifelse(!is.na(scientificNameAuthorship), 
                                  paste0(scientificName, " (", scientificNameAuthorship, ")"),
                                  scientificName)) %>%
-  select(-Taxon, -Abundance_m3, -AphiaID)
+  select(-Taxon, -Abundance_m3, -Abundance_m2, -AphiaID)
 
-IYS2022_occ_final[is.na(IYS2022_occ_final)] <- ""
-write_csv(IYS2022_occ_final, here("standardized_data", "IYS2022_zoop_occ_final.csv"))
+IYS2022_bongo_occ[is.na(IYS2022_bongo_occ)] <- ""
+write_csv(IYS2022_bongo_occ, here("standardized_data", "IYS2022_bongo_occ.csv"))
 ```
 
-Run some checks on the event and occurrence data tables:
+## Section 3. extended measurement Or Fact (eMOF) extension
+
+The eMOF data table will be specific to information that can be nested under the occurrenceID. It provides further information on taxa abundance, as well as controlled vocabulary for associated sex and developmental stages. 
+
+```{r emof cont., eval = FALSE}
+bongo2022_emof <- IYS2022_occ_final %>%
+  select(occurrenceID, sex, lifeStage, Abundance_m3, Abundance_m2) %>%
+  mutate_all(as.character) %>%
+  pivot_longer(cols = sex:Abundance_m3,
+               names_to = "measurementType",
+               values_to = "measurementValue") %>%
+  mutate(measurementID = paste(occurrenceID, measurementType, sep = "-"),
+    measurementTypeID = case_when(
+      measurementType == "lifeStage" ~ "http://vocab.nerc.ac.uk/collection/P01/current/LSTAGE01/",
+      measurementType == "sex" ~ "http://vocab.nerc.ac.uk/collection/P01/current/ENTSEX01/",
+      measurementType == "Abundance_m3" ~ "http://vocab.nerc.ac.uk/collection/P01/current/SDBIOL01/",
+      measurementType == "Abundance_m2" ~ "http://vocab.nerc.ac.uk/collection/P01/current/SDBIOL02/"),
+    measurementUnit = case_when(
+      measurementType == "Abundance_m3" ~ "individuals per cubic meter",
+      measurementType == "Abundance_m2" ~ "individuals per square meter"), 
+    measurementUnitID = case_when(
+      measurementUnit == "individuals per cubic meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UPMM/",
+      measurementUnit == "individuals per square meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UPMS/"),
+    measurementValueID = case_when(
+      measurementValue == "Male" ~ "http://vocab.nerc.ac.uk/collection/S10/current/S103/",
+      measurementValue == "Female" ~ "http://vocab.nerc.ac.uk/collection/S10/current/S102/",
+      measurementValue == "adult" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1116/",
+      measurementValue == "C5" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1112/",
+      measurementValue == "C6" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1110/",
+      measurementValue == "C4-5" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1111/",
+      measurementValue == "C4" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1110/",
+      measurementValue == "C3" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S118/",
+      measurementValue == "C2" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S117/",
+      measurementValue == "C1" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S111/",
+      measurementValue == "juvenile" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1127/",
+      measurementValue == "furcilia" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1123/",
+      measurementValue == "egg" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1122/",
+      measurementValue == "nauplii" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1130/",
+      measurementValue == "cal" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1118/",
+      measurementValue == "larvae" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1128/",
+      measurementValue == "Megalopa" ~ "https://vocab.nerc.ac.uk/collection/S11/current/S1167/",
+      measurementValue == "preflexion" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1188/", 
+      measurementValue == "calyptopis" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1118/",
+      measurementValue == "nectophore" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1197/",
+      measurementValue == "old nurse" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1196/",
+      measurementValue == "flexion" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1189/",
+      measurementValue == "nauplius" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1130/",
+      measurementValue == "mysis" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1161/",
+      measurementValue == "polytroch" ~ " ",
+      measurementValue == "eudoxid" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1195/",
+      measurementValue == "postflexion" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1190/",
+      measurementValue == "veliger" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1193/",
+      measurementValue == "trochophore" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1192/",
+      measurementValue == "C5-6" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1114/",
+      measurementValue == "gas floats" ~ " ",
+      measurementValue == "megalopa" ~ "https://vocab.nerc.ac.uk/collection/S11/current/S1167/",
+      measurementValue == "cyprid" ~ " ",
+      measurementValue == "C4/C5" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1111/",
+      measurementValue == "zoea" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1137/", 
+      measurementValue == "polygastric" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1101/",
+      measurementValue == "nurse" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1196/",
+      measurementValue == "zooid" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1138/",
+      measurementValue == "crytoniscid larva" ~ " ",
+      measurementValue == "cyphonautes" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1119/",
+      measurementValue == "microniscid larva" ~ " "),
+    measurementRemarks = NA) %>%
+  drop_na(measurementValue)
+
+# Save locally
+write_csv(bongo2022_emof, here("standardized_data", "IYS2022_bongo_emof.csv"))
+```
+
+## Section 4. Basic QAQC
+
+Run some basic QAQC tests to ensure compatibility with other data in OBIS:
 
 ```{r checks, eval = FALSE}
+
+IYS2022_bongo_event$decimalLatitude <- as.numeric(IYS2022_bongo_event$decimalLatitude)
+IYS2022_bongo_event$decimalLongitude <- as.numeric(IYS2022_bongo_event$decimalLongitude)
+bongo2022_leaflet <- obistools::plot_map_leaflet(IYS2022_bongo_event)
+bongo_map <- obistools::plot_map(IYS2022_bongo_event, zoom = TRUE)
+ggsave(filename = "bongo2022_map.png", plot = bongo_map,
+       path = here::here("standardized_data", "maps"))
+
 # Check if all OBIS required fields are present in occurrence table:
 obistools::check_fields(IYS2022_occ_final) # Only missing eventDate, decimalLongitude and decimalLatitude which are in the event table.
-
-# Plot points on a map to ensure no observations on land:
-obistools::plot_map(IYS2022_bongo_event, zoom = TRUE)
-obistools::check_onland(unlist(lapply(IYS2022_bongo_event, as.numeric)), report = T)
 
 # Check whether all eventIDs are matched:
 obistools::check_extension_eventids(IYS2022_bongo_event, IYS2022_bongo_final)
@@ -399,565 +510,15 @@ obistools::check_extension_eventids(IYS2022_bongo_event, IYS2022_bongo_final)
 # Check eventDate
 obistools::check_eventdate(IYS2022_bongo_event)
 
-# Basic quality report:
-obistools::report(unlist(IYS2022_bongo_event))
-
 # Create tree structure -- not very exciting for this data structure
 tree <- treeStructure(IYS2022_bongo_event, IYS2022_bongo_final)
 exportTree(tree, "tree.html")
 
 ```
 
-```{r occurrence extension, eval = FALSE}
-nw2022_bongo_occ <- nw2022_bongo_data %>%
-  mutate(eventID = paste(station_event_id, net_number, sep = "-"),
-         occurrenceID = paste(eventID, row_number(), sep = "-"),
-         occurrenceStatus = "present",
-         preparations = "Formalin")
+## Section 5. Standardizing zooplankton data to the IYS Data Template
 
-shim2022_bongo_occ <- shim2022_bongo_data %>%
-  mutate(eventID = paste(station_event_id, net_number, sep = "-"),
-         occurrenceID = paste(eventID, row_number(), sep = "-"),
-         occurrenceStatus = "present", 
-         preparations = "Formalin")
-
-# Combine these data frames:
-shim_nw_bongo_occ <- rbind(nw2022_bongo_occ, shim2022_bongo_occ)
-
-# Change sex, lifestage and remove NAs:
-shim_nw_bongo_occ$sex[shim_nw_bongo_occ$sex == "F"] <- "female"
-shim_nw_bongo_occ$sex[shim_nw_bongo_occ$sex == "M"] <- "male"
-shim_nw_bongo_occ$sex[shim_nw_bongo_occ$sex == "N/A"] <- NA
-
-shim_nw_bongo_occ$lifestage[shim_nw_bongo_occ$lifestage == "caliptopis"] <- "calyptopis"
-shim_nw_bongo_occ$lifestage[shim_nw_bongo_occ$lifestage == "C4/C5"] <- "C4-5"
-shim_nw_bongo_occ$lifestage[shim_nw_bongo_occ$lifestage == "N/A"] <- NA
-  
-# Standardize columns to Darwin Core:
-shim_nw_bongo_occ <- shim_nw_bongo_occ %>%
-  rename(verbatimIdentification = species_recorded)
-
-# From the scientific_name column, create identificationQualifier column, then remove 'SP.', and add 'sp. indet' for Neocalanus Flemingeri/plumchrus:
-shim_nw_bongo_occ$identificationQualifier <- ifelse(grepl("\\b SP.\\b|\\b SP\\b", shim_nw_bongo_occ$scientific_name), "sp. indet.", NA)
-shim_nw_bongo_occ$identificationQualifier <- ifelse(grepl("NEOCALANUS FLEMINGERI/PLUMCHRUS", shim_nw_bongo_occ$scientific_name), 
-                                                    "sp. indet.", shim_nw_bongo_occ$identificationQualifier)
-shim_nw_bongo_occ$scientific_name <- gsub("\\b SP.\\b|\\b SP\\b", "", shim_nw_bongo_occ$scientific_name) 
-
-# Remove any special characters (punctuation, brackets etc)
-shim_nw_bongo_occ$scientific_name <- gsub("[[:punct:]]", "", shim_nw_bongo_occ$scientific_name)
-
-# Finally, remove any references to lifestage or sex from the scientific_name column, as this information is captured in separate columns already:
-shim_nw_bongo_occ$scientific_name <- gsub(" LARVAE| JUVENILES| FURCILIA| BRACTS| NURSE| MEDIUM| SMALL| EXTRA SMALL| NAUPLII| ZOEA| CALYPTOPIS| AF| AM| V$| IV| III| II| I$", "", shim_nw_bongo_occ$scientific_name)
-
-manual_check <- shim_nw_bongo_occ %>% select(scientific_name, verbatimIdentification, sex, lifestage, identificationQualifier) %>% distinct()
-
-# scientific names are all capitalized. Change this from e.g. CYPHOCARIS CHALLENGERI to Cyphocaris challengeri:
-shim_nw_bongo_occ$scientific_name <- tolower(shim_nw_bongo_occ$scientific_name)
-shim_nw_bongo_occ$scientific_name <- Hmisc::capitalize(shim_nw_bongo_occ$scientific_name)
-
-# Check accuracy of scientific names:
-worms_id <- worrms::wm_records_names(unique(shim_nw_bongo_occ$scientific_name), marine_only = FALSE) %>% dplyr::bind_rows() %>% rename(scientific_name = scientificname)
-
-# Find out which species are not found in the WoRMS database:
-no_worms_id <- left_join(shim_nw_bongo_occ, worms_id, by = "scientific_name") %>% filter(is.na(AphiaID)) %>% distinct(scientific_name)
-
-# Change the verbatimIdentification of IYS2022-NW-2-15-Bongo-1-876, where the species for scientificName and verbatimIdentification do not match, as per Alexei Pinchuk. 
-shim_nw_bongo_occ <- shim_nw_bongo_occ %>%
-  mutate(verbatimIdentification = ifelse(occurrenceID == "IYS2022-NW-2-15-Bongo-1-876", "SCOLECITHRICELLA OVATA AF", verbatimIdentification))
-
-# 7 names have to be changed to match WoRMS accepted names. These have to be changed in the original data table
-shim_nw_bongo_occ$scientific_name <- gsub("Fish", "Pisces", shim_nw_bongo_occ$scientific_name)
-shim_nw_bongo_occ$scientific_name <- gsub("Siphonophora", "Siphonophorae", shim_nw_bongo_occ$scientific_name)
-shim_nw_bongo_occ$scientific_name <- gsub("Metridia ochotensis", "Metridia okhotensis", shim_nw_bongo_occ$scientific_name)
-shim_nw_bongo_occ$scientific_name <- gsub("Neocalanus flemingeriplumchrus", "Neocalanus", shim_nw_bongo_occ$scientific_name)
-shim_nw_bongo_occ$scientific_name <- gsub("Squid", "Teuthida", shim_nw_bongo_occ$scientific_name)
-shim_nw_bongo_occ$scientific_name <- gsub("Gastropoda echinospira", "Gastropoda", shim_nw_bongo_occ$scientific_name)
-shim_nw_bongo_occ$scientific_name <- gsub("Oithona copepodids", "Oithona", shim_nw_bongo_occ$scientific_name)
-
-# As we have now changed all the names in the original dataframe to fit the entries in the WoRMS database registry, we can use wm_records_names() again to find all the taxonomic information. 
-shim_nw_bongo_worms_id <- worrms::wm_records_names(unique(shim_nw_bongo_occ$scientific_name), marine_only = FALSE) %>%
-  dplyr::bind_rows() %>% rename(scientific_name = scientificname)
-
-# After manual inspection, there are some AphiaIDs that need to be removed, as the species is listed multiple times.
-shim_nw_bongo_worms_id <- filter(shim_nw_bongo_worms_id, !(AphiaID %in% c("534090", "999078")))
-
-shim_nw_bongo_occ <- left_join(shim_nw_bongo_occ, shim_nw_bongo_worms_id, by = "scientific_name") 
-
-shim_nw_bongo_occ <- shim_nw_bongo_occ %>%
-  mutate(identificationRemarks = ifelse(verbatimIdentification == "ACARTIA LONGIREMIS AM" & sex == "female", "Sex is assumed to be correct as per Joanne Breckenridge.", NA))
-
-shim_nw_bongo_final <- shim_nw_bongo_occ %>%
-  select(verbatimIdentification, 
-         lifeStage = lifestage, 
-         sex, eventID, 
-         individualCount = catch_count,
-         organismQuantity = abundance_m3,
-         scientificName = scientific_name,
-         scientificNameAuthorship = authority,
-         taxonomicStatus = status,
-         taxonomicRank = rank,
-         kingdom, phylum, class, order, family, genus, 
-         scientificNameID = lsid,
-         occurrenceID, occurrenceStatus, preparations, identificationQualifier, identificationRemarks) %>%
-  mutate(specificEpithet = stringr::word(scientificName, 2),
-         organismQuantityType = "individuals per cubic meter",
-         previousIdentifications = "",
-         identificationReferences = "")
-
-# Remove NAs from the dataframe:
-shim_nw_bongo_final[is.na(shim_nw_bongo_final)] <- ""
-shim_nw_bongo_final <- as_tibble(shim_nw_bongo_final)
-```
-
-Next, the Bongo zooplankton data collected by the TINRO, which is provided in a different format: 
-
-```{r TINRO bongo}
-tinro2022_bongo_counts <- tinro2022_bongo_data[-c(1:4, 149:295),]
-tinro2022_bongo_abund <- tinro2022_bongo_data[-c(1:151),]
-
-tinro2022_bongo_counts <- tinro2022_bongo_counts %>%
-  pivot_longer(cols = `1`:`32`,
-               values_to = "counts",
-               names_to = "station") 
-
-tinro2022_bongo_abund <- tinro2022_bongo_abund %>%
-  pivot_longer(cols = `1`:`32`,
-               values_to = "ind/m3",
-               names_to = "station")
-
-tinro2022_bongo_occ <- left_join(tinro2022_bongo_counts, tinro2022_bongo_abund)
-
-tinro2022_bongo_occ$station <- as.numeric(tinro2022_bongo_occ$station)
-tinro2022_bongo_occ <- tinro2022_bongo_occ[order(tinro2022_bongo_occ$station),]
-tinro2022_bongo_occ <- tinro2022_bongo_occ %>% rename(verbatimIdentification = `Station No`)
-```
-
-In the _Stage/length_ column, size ranges, sex and lifestages are sometimes included. We need to parse these out and include them in separate columns. If numerical values are included, these need to be included in a `size_range` column. If sex is included in the scientific name (i.e. 'AF' for adult female), include this in column `sex`. Lifestage, such as 'adult' (A) need to be included in `lifeStage` column.
-
-```{r TINRO bongo cont}
-tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
-  mutate(size_range = ifelse(grepl("\\d+", `Stage/length`), `Stage/length`, NA), 
-         `Stage/length` = ifelse(grepl("\\d+", `Stage/length`), NA, `Stage/length`),
-         sex = ifelse(grepl("F", `Stage/length`), "female", 
-                      ifelse(grepl("M", `Stage/length`), "male", NA)), 
-         `Stage/length` = ifelse(grepl("A", `Stage/length`), "C6", `Stage/length`)) %>% 
-  rename(lifeStage = `Stage/length`) %>%
-  mutate(eventID = paste("IYS2022", "TINRO", "3", station, "Bongo", "1", sep = "-")) %>%
-  as.data.frame()
-
-# Size (ranges) in the verbatimIdentification should also be included in the size_range column
-tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
-  mutate(size_range = ifelse(grepl("0.5mm", verbatimIdentification), "0.5mm", size_range),
-         size_range = ifelse(grepl("1.5mm", verbatimIdentification), "1.5mm", size_range),
-         size_range = ifelse(grepl("2.5mm", verbatimIdentification), "2.5mm", size_range),
-         size_range = ifelse(grepl("1mm", verbatimIdentification), "1mm", size_range))
-
-# Remove 'Jelly fragment' observations from data as per JB, as there was only one taxonomist that recorded this:
-tinro2022_bongo_occ <- tinro2022_bongo_occ[tinro2022_bongo_occ$verbatimIdentification != 'Jelly fragments', ]
-
-# Change the lifestage in TINRO data as per JB
-tinro2022_bongo_occ$lifeStage[tinro2022_bongo_occ$lifeStage == 'IV-V' ] <- 'C4-5'
-tinro2022_bongo_occ$lifeStage[tinro2022_bongo_occ$lifeStage == 'V' ] <- 'C5'
-tinro2022_bongo_occ$lifeStage[tinro2022_bongo_occ$lifeStage == 'IV' ] <- 'C4'
-tinro2022_bongo_occ$lifeStage[tinro2022_bongo_occ$lifeStage == 'III' ] <- 'C3'
-tinro2022_bongo_occ$lifeStage[tinro2022_bongo_occ$lifeStage == 'II' ] <- 'C2'
-tinro2022_bongo_occ$lifeStage[tinro2022_bongo_occ$lifeStage == 'I' ] <- 'C1'
-tinro2022_bongo_occ$lifeStage[tinro2022_bongo_occ$lifeStage == "cal"] <- "calyptopis"
-
-# Lifestages in the verbatimidentification should also be included in the lifeStage column:
-tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
-  mutate(lifeStage = ifelse(grepl("larvae", verbatimIdentification), "larvae", lifeStage),
-         lifeStage = ifelse(grepl("juv.", verbatimIdentification), "juvenile", lifeStage),
-         lifeStage = ifelse(grepl("fur", size_range), "furcilia", lifeStage),
-         lifeStage = ifelse(grepl("egg", verbatimIdentification), "egg", lifeStage),
-         lifeStage = ifelse(grepl("Crytoniscid", verbatimIdentification), "crytoniscid larva", lifeStage),
-         lifeStage = ifelse(grepl("Microniscid", verbatimIdentification), "microniscid larva", lifeStage),
-         lifeStage = ifelse(grepl("cyphonautes", verbatimIdentification), "cyphonautes", lifeStage))
-
-# Add sex when notation included in the verbatimIdentification:
-tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
-  mutate(sex = ifelse(verbatimIdentification == "Clausocalanus sp. - really small, 0.5mm  tiny 5th leg AF voucher", "female", sex),
-         sex = ifelse(verbatimIdentification == "Clausocalanus sp. , 1.5mm  tiny 5th leg AF voucher", "female", sex))
-
-# Create column 'identificationQualifier' to indicate uncertainty in species classification:
-tinro2022_bongo_occ$identificationQualifier <- ifelse(grepl("\\b sp.\\b|\\b spp.\\b|\\b sp. \\b", tinro2022_bongo_occ$verbatimIdentification), "sp. indet.", NA)
-tinro2022_bongo_occ$identificationQualifier <- ifelse(tinro2022_bongo_occ$verbatimIdentification == "Clausocalanus sp. - really small, 0.5mm  tiny 5th leg AF voucher", "sp. indet.", tinro2022_bongo_occ$identificationQualifier)
-tinro2022_bongo_occ$identificationQualifier <- ifelse(tinro2022_bongo_occ$verbatimIdentification == "Clausocalanus sp. , 1.5mm  tiny 5th leg AF voucher", "sp. indet.", tinro2022_bongo_occ$identificationQualifier)
-tinro2022_bongo_occ$identificationQualifier <- ifelse(grepl("Neocalanus plumchrus/flemmingi", tinro2022_bongo_occ$verbatimIdentification), "sp. indet.", tinro2022_bongo_occ$identificationQualifier)
-
-# Next, duplicate the verbatimIdentification column so that we can make changes where necessary to the scientific names based on the WoRMS Registry:
-tinro2022_bongo_occ$scientific_name <- tinro2022_bongo_occ$verbatimIdentification
-
-# From this duplicated column, remove 'sp.' and 'spp.' to begin with;
-tinro2022_bongo_occ$scientific_name <- gsub("\\b sp.\\b|\\b spp.\\b|\\b SP.\\b", "", tinro2022_bongo_occ$scientific_name) 
-
-# Manual check to see if those changes have been made correctly:
-manual_check <- tinro2022_bongo_occ %>% select(scientific_name, verbatimIdentification, sex, lifeStage, identificationQualifier, size_range) %>% distinct()
-
-# Remove any special characters (punctuation, brackets etc)
-tinro2022_bongo_occ$scientific_name <- gsub("[[:punct:]]", "", tinro2022_bongo_occ$scientific_name)
-
-# Check accuracy of scientific names:
-worms_id <- worrms::wm_records_names(unique(tinro2022_bongo_occ$scientific_name), marine_only = FALSE) %>% dplyr::bind_rows() %>% rename(scientific_name = scientificname)
-
-# Find out which species are not found in the WoRMS database:
-no_worms_id <- left_join(tinro2022_bongo_occ, worms_id, by = "scientific_name") %>% filter(is.na(AphiaID)) %>% distinct(scientific_name)
-
-# 34 names have to be changed to match WoRMS accepted names. These have to be changed in the original data table (tinro2022_bongo_occ)
-tinro2022_bongo_occ$scientific_name <- gsub("Scolethricella minor", "Scolecithricella minor", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Scolethricella ovata", "Scolecithricella ovata", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Gaetanus intermedius", "Gaetanus simplex", tinro2022_bongo_occ$scientific_name) # As per A. Pinchuk
-tinro2022_bongo_occ$scientific_name <- gsub("Siphonophora", "Siphonophorae", tinro2022_bongo_occ$scientific_name) # As per A. Pinchuk
-tinro2022_bongo_occ$scientific_name <- gsub("Neocalanus plumchrusflemmingi", "Neocalanus", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Eucheata elongata", "Euchaeta elongata", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Candacia columbia", "Candacia columbiae", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Clausocalanus sp  really small 05mm  tiny 5th leg AF voucher", "Clausocalanus", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Clausocalanus sp  15mm  tiny 5th leg AF voucher", "Clausocalanus", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Clausocalanus sp 1mm", "Clausocalanus", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Clausocalanus sp 25mm", "Clausocalanus", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Mesocalanus tenniucornus", "Mesocalanus tenuicornis", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Acartia longirmis", "Acartia longiremis", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Lucicutia 15mm", "Lucicutia", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Hyperia juv", "Hyperia", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa inspinata", "Thysanoessa inspinata", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa spinifer", "Thysanoessa spinifera", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa inermis", "Thysanoessa inermis", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Thysanoesa longipes", "Thysanoessa longipes", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Chionocetes", "Chionoecetes", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Crytoniscid parasitic isopod larvae", "Isopoda", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Microniscid parasitic isopod larvae", "Isopoda", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Polycheata", "Polychaeta", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Tyroscrolex leafy stick", "Typhloscolex muelleri", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Limiacina helicina", "Limacina helicina", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Squid larvae", "Teuthida", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Eukronia hamata", "Eukrohnia hamata", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Sagitta scrippae  larger transparent fellow", "Sagitta scrippsae", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Oikopluera", "Oikopleura", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Fritilaria", "Fritillaria", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Siphonophore bract", "Siphonophorae", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Fish egg", "Pisces", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Fish larvae", "Pisces", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Brozoan cyphonautes", "Bryozoa", tinro2022_bongo_occ$scientific_name)
-tinro2022_bongo_occ$scientific_name <- gsub("Pumkin boy unknown critter could be sea anemone larvae", "Zoanthidea", tinro2022_bongo_occ$scientific_name) # As per A. Pinchuk
-
-# Add identificationRemarks where necessary/described in the verbatimIdentification: 
-tinro2022_bongo_occ <- tinro2022_bongo_occ %>%
-  mutate(identificationRemarks = ifelse(grepl("larger transparent fellow", verbatimIdentification), "larger transparent fellow", NA))
-
-# As we have now changed all the names in the original dataframe to fit the entries in the WoRMS database registry, we can use wm_records_names() again to find all the taxonomic information. 
-tinro2022_bongo_worms_id <- worrms::wm_records_names(unique(tinro2022_bongo_occ$scientific_name), marine_only = FALSE) %>%
-  dplyr::bind_rows() %>% rename(scientific_name = scientificname)
-
-# After manual inspection, there are some AphiaIDs that need to be removed, as the species is listed multiple times.
-tinro2022_bongo_worms_id <- filter(tinro2022_bongo_worms_id, !(AphiaID %in% c("534090", "835292", "503291")))
-
-# Check to see if we missed any:
-unique_taxa <- as.data.frame(unique(tinro2022_bongo_occ$scientific_name))
-names(unique_taxa)[1] <- "scientific_name"
-temp_taxa <- left_join(unique_taxa, tinro2022_bongo_worms_id) %>% filter(is.na(AphiaID)) # should be empty.
-print(temp_taxa)
-
-tinro2022_bongo_occ <- left_join(tinro2022_bongo_occ, tinro2022_bongo_worms_id, by = "scientific_name") %>%
-  group_by(eventID) %>%
-  mutate(id = seq_along(eventID)) %>%
-  mutate(occurrenceID = paste(eventID, id, sep = "-"),
-         occurrenceStatus = "present",
-         preparations = "Formalin")
-
-tinro2022_bongo_final <- tinro2022_bongo_occ %>%
-  select(verbatimIdentification, lifeStage, sex, eventID, identificationQualifier, 
-         individualCount = counts,
-         organismQuantity = `ind/m3`,
-         size_range,
-         scientificName = scientific_name,
-         scientificNameAuthorship = authority,
-         taxonomicStatus = status,
-         taxonomicRank = rank,
-         kingdom, phylum, class, order, family, genus, 
-         scientificNameID = lsid,
-         occurrenceID, occurrenceStatus, preparations, identificationRemarks) %>%
-  mutate(specificEpithet = stringr::word(scientificName, 2),
-         organismQuantityType = "individuals per cubic meter",
-         identificationReferences = "",
-         previousIdentifications = "")
-
-# Remove NAs from the dataframe:
-tinro2022_bongo_final[is.na(tinro2022_bongo_final)] <- ""
-tinro2022_bongo_final <- as_tibble(tinro2022_bongo_final)
-```
-
-Finally, the Franklin bongo occurrence data, which is also provided in a different format:
-
-```{r Franklin bongo, eval = FALSE}
-franklin2022 <- franklin2022_bongo_data %>%
-  dplyr::rename(Abundance = `Abundance(#/m3)`,
-                scientificName = Name) %>%
-  mutate(verbatimIdentification = scientificName)
-
-franklin2022$stage_length <- sub('.*\\ ', '', franklin2022$scientificName)
-franklin2022$lifestage <- NA # create dummy column
-
-franklin2022 <- franklin2022 %>%
-  mutate(scientificName = word(scientificName, 1, -2))
-
-# Remove Rhizarian taxa, and associated Station:
-franklin2022 <- franklin2022[franklin2022$'Phylum:' !='Rhizaria', ]
-
-# Dealing with some Franklin-specific issues. From readme we know *sp. = spp.
-franklin2022$scientificName <- str_replace_all(franklin2022$scientificName, fixed('*sp.'), "spp.")
-
-# For all observations with sp, spp. and aff include information in identificationQualifier column:
-franklin2022 <- franklin2022 %>%
-  mutate(identificationQualifier = ifelse(grepl("\\b spp.", franklin2022$scientificName), "sp. indet.", NA),
-         identificationQualifier = ifelse(grepl(" aff", franklin2022$scientificName), "sp. aff.", identificationQualifier))
-
-franklin2022$scientificName <- gsub("[[:punct:]]", "", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("\\b spp\\b", "", franklin2022$scientificName)
-franklin2022$scientificName <- trimws(franklin2022$scientificName, "r")
-
-# Parse out lifestage in separate column:
-franklin2022$lifestage = ifelse(grepl("juvenile", franklin2022$scientificName),"juvenile", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("cyprids", franklin2022$scientificName), "cyprid", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("eggs", franklin2022$scientificName), "egg", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("eudoxid", franklin2022$scientificName), "eudoxid", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("flexion", franklin2022$scientificName), "flexion", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("gas floats", franklin2022$scientificName), "gas floats", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("megalops", franklin2022$scientificName), "megalopa", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("mysis", franklin2022$scientificName), "mysis", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("nauplii", franklin2022$scientificName), "nauplii", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("nectophore", franklin2022$scientificName), "nectophore", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("old nurse", franklin2022$scientificName), "nurse", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("paralarvae", franklin2022$scientificName), "paralarvae", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("\\blarvae\\b", franklin2022$scientificName), "larvae", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("polytroch", franklin2022$scientificName), "polytroch", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("postflexion", franklin2022$scientificName), "postflexion", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("preflexion", franklin2022$scientificName), "preflexion", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("calyptopis", franklin2022$scientificName), "calyptopis", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("veligers", franklin2022$scientificName), "veliger", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("furcilia", franklin2022$scientificName), "furcilia", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("zoea", franklin2022$scientificName), "zoea", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("protozoea \\(or calyptopis\\)", franklin2022$scientificName), "calyptopis", franklin2022$lifestage)
-franklin2022$lifestage = ifelse(grepl("zoea \\(or furcilia\\)", franklin2022$scientificName), "furcilia", franklin2022$lifestage)
-
-# Change some lifestages as per Joanne Breckenridge:
-franklin2022$lifestage[franklin2022$scientificName == "Thysanoessa inspinata" & franklin2022$lifestage == "zoea"] <- "furcilia"
-franklin2022$lifestage[franklin2022$scientificName == "Stylocheiron spp." & franklin2022$lifestage == "zoea"] <- "furcilia"
-
-# 13 names will have to be adjusted to match with the WoRMS registry. Change these in the original dataframe:
-franklin2022$scientificName <- gsub("Gastropoda trich larvae", "Gastropoda", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Euphausiidae protozoea or calyptopis", "Euphausiidae", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Euphausiidae zoea or furcilia", "Euphausiidae", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Metridia aff lucens", "Metridia lucens", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Conchoecia rudjakovi", "Conchoecia rudyakovi", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Conchoecinae", "Conchoeciinae", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Oikopleura labradoriensis", "Oikopleura (Vexillaria) labradoriensis", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Limacina helicina acuta", "Limacina helicina", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Epicarid", "Epicaridea", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Doliolid", "Doliolidae", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Fish", "Pisces", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Oikopleura longicauda", "Oikopleura (Coecaria) longicauda", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("Alacia aff major", "Alacia major", franklin2022$scientificName)
-
-
-# Remove some lifestages from the scientific names. 
-franklin2022$scientificName <- gsub("\\bspp. trich\\b", "", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("\\bspp. \\(old nurse\\)\\b", "", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("old nurse", "", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("paralarvae", "", franklin2022$scientificName)
-franklin2022$scientificName <- gsub("larvae", "", franklin2022$scientificName)
-
-#extract 'Length' info, after creating the dummy column:
-franklin2022$length <- NA
-franklin2022$length = ifelse(grepl("s0", franklin2022$stage_length),"< 2mm", franklin2022$length)
-franklin2022$length = ifelse(grepl("s1", franklin2022$stage_length),"< 5mm", franklin2022$length)
-franklin2022$length = ifelse(grepl("s2", franklin2022$stage_length),">= 5mm < 10mm", franklin2022$length)
-franklin2022$length = ifelse(grepl("s3", franklin2022$stage_length),">= 10mm", franklin2022$length)
-franklin2022$length = ifelse(grepl("s4", franklin2022$stage_length),"> average", franklin2022$length)
-
-# Add sex:
-franklin2022$sex <- NA
-franklin2022$sex = ifelse(grepl("M", franklin2022$stage_length), "male", franklin2022$sex)
-franklin2022$sex = ifelse(grepl("F", franklin2022$stage_length), "female", franklin2022$sex)
-
-# Rename lifestages:
-franklin2022$lifestage[franklin2022$stage_length == '15'] <- 'C1-5'
-franklin2022$lifestage[franklin2022$stage_length == '56'] <- 'C5-6'
-franklin2022$lifestage[franklin2022$stage_length == '1'] <- 'C1'
-franklin2022$lifestage[franklin2022$stage_length == '2'] <- 'C2'
-franklin2022$lifestage[franklin2022$stage_length == '3'] <- 'C3'
-franklin2022$lifestage[franklin2022$stage_length == '4M'] <- 'C4'
-franklin2022$lifestage[franklin2022$stage_length == '4F'] <- 'C4'
-franklin2022$lifestage[franklin2022$stage_length == '4'] <- 'C4'
-franklin2022$lifestage[franklin2022$stage_length == '5M'] <- 'C5'
-franklin2022$lifestage[franklin2022$stage_length == '5F'] <- 'C5'
-franklin2022$lifestage[franklin2022$stage_length == '5'] <- 'C5'
-franklin2022$lifestage[franklin2022$stage_length == '6F'] <- 'C6'
-franklin2022$lifestage[franklin2022$stage_length == '6M'] <- 'C6'
-
-# Remove lifestages from the scientific name:
-franklin2022$scientificName <- franklin2022$scientificName %>% stringr::str_remove('cyprids|eggs|eudoxid|flexion|gas floats|juvenile|megalops|mysis|nauplii|nectophore|\\(old  nurse\\)|paralarvae|larvae|polytroch|postflexion|preflexion|protozoea \\(or calyptopis\\)|veligers|zoea \\(or furcilia\\)|zoea')
-franklin2022$scientificName <- trimws(franklin2022$scientificName, "r")
-
-franklin2022$scientificName <- gsub("Siphonophora", "Siphonophorae", franklin2022$scientificName)
-
-# Next, we're going to match the observed taxa with the WoRMS Registry. 
-unique_spp <- franklin2022 %>% select(scientificName) %>% unique() %>% as.data.frame() %>% rename(scientific_name = scientificName)
-worms <- worrms::wm_records_names(unique_spp$scientific_name, marine_only = F) %>% dplyr::bind_rows()
-
-# Remove AphiaIDs that are incorrect. .
-franklin2022_bongo_worms_id <- filter(worms, !(AphiaID %in% c("410743", "603038", "14775", "588510", "956054", "956065", "163921", "835292"))) %>%
-  select(scientificName = scientificname, 
-         scientificNameID = lsid,
-         scientificNameAuthorship = authority,
-         taxonomicStatus = status,
-         taxonomicRank = rank, 
-         kingdom, phylum, class, order, family, genus, AphiaID)
-
-# Connect this information back to the franklin2022 dataframe:
-franklin2022 <- left_join(franklin2022, franklin2022_bongo_worms_id, by = "scientificName")
-
-# Somehow, 4 rows show up that contain only NA values. Remove these:
-franklin2022 <- subset(franklin2022, rowSums(is.na(franklin2022)) != ncol(franklin2022))
-
-# Perform a manual check
-manual_check <- franklin2022 %>% select(verbatimIdentification, scientificName, stage_length, 
-                                        lifestage, sex, length, identificationQualifier) %>% distinct()
-
-# There are still scientificNames that do not have a corresponding AphiaID. For these species, we change the scientificName to a blank cell to avoid confusion. The species will still be recorded under 'verbatimIdentification.
-franklin2022 <- franklin2022 %>% 
-  mutate(scientificName = ifelse(is.na(AphiaID), NA, scientificName))
-
-# Remove rows that are all NA:
-franklin2022 <- franklin2022 %>% filter_all(any_vars(!is.na(.)))
-# You want to use this because na.omit() removes _any_ row that contains NA. lifeStage column also contains NA, but this you want to retain.
-
-franklin2022_bongo_final <- franklin2022 %>%
-  select(Station, 
-         verbatimIdentification, 
-         lifeStage = lifestage, sex, 
-         organismQuantity = Abundance,
-         size_range = length,
-         scientificName,
-         scientificNameAuthorship,
-         taxonomicStatus,
-         taxonomicRank,
-         kingdom, phylum, class, order, family, genus, 
-         scientificNameID,
-         identificationQualifier) %>%
-  mutate(eventID = paste("IYS2022", "Franklin", "5", Station, "Bongo", "1", sep = "-")) %>%
-  group_by(eventID) %>%
-  mutate(occurrenceID = paste(eventID, row_number(), sep = "-"),
-         occurrenceStatus = "present",
-         individualCount = NA,
-         preparations = "formalin", 
-         specificEpithet = stringr::word(scientificName, 2),
-         organismQuantityType = "individuals per cubic meter",
-         identificationRemarks = "",
-         previousIdentifications = "",
-         identificationReferences = "") %>%
-  ungroup()
-
-# specificEpithet needs to change for Oikopleura (Vexillaria) labradoriensis":
-franklin2022_bongo_final <- franklin2022_bongo_final %>%
-  mutate(specificEpithet = ifelse(scientificName == "Oikopleura (Vexillaria) labradoriensis", "labradoriensis", specificEpithet),
-         specificEpithet = ifelse(scientificName == "Oikopleura (Coecaria) longicauda", "longicauda", specificEpithet))
-
-# Remove NAs from the dataframe:
-franklin2022_bongo_final[is.na(franklin2022_bongo_final)] <- ""
-franklin2022_bongo_final <- as_tibble(franklin2022_bongo_final)
-```
-
-Combine these occurrence extensions into a single dataframe and save locally:
-
-```{r IYS2022 bongo}
-IYS2022_bongo_final <- plyr::rbind.fill(shim_nw_bongo_final, tinro2022_bongo_final,
-                                        franklin2022_bongo_final) %>% as.data.frame()
-
-# Remove brackets from the scientificNameAuthorship, then join it to the scientificName following format:
-# <scientificName> (scientificNameAuthorship)
-IYS2022_bongo_final <- IYS2022_bongo_final %>%
-  mutate(scientificNameAuthorship = str_replace_all(scientificNameAuthorship, "\\(|\\)", ""),
-         scientificNameAuthorship = ifelse(scientificNameAuthorship == "", NA, scientificNameAuthorship))
-
-IYS2022_bongo_final <- IYS2022_bongo_final %>%
-  mutate(scientificName = ifelse(!is.na(scientificNameAuthorship), 
-                                 paste0(scientificName, " (", scientificNameAuthorship, ")"),
-                                 scientificName))
-
-#TODO: Make some changes as per Joanne Breckenridge September 28, 2023:
-IYS2022_bongo_final <- IYS2022_bongo_final %>%
-  mutate(lifeStage = ifelse(grepl("bract|BRACTS", verbatimIdentification), "polygastric", lifeStage),
-         lifeStage = ifelse(grepl("trich", verbatimIdentification), "trochophore", lifeStage),
-         lifeStage = ifelse(grepl("old nurse", verbatimIdentification), "nurse", lifeStage),
-         lifeStage = ifelse(grepl("cyphonautes", verbatimIdentification), "cyphonautes", lifeStage),
-         lifeStage = ifelse(grepl("SQUID LARVAE", verbatimIdentification), "larvae", lifeStage))
-
-IYS2022_bongo_final <- IYS2022_bongo_final %>%
-  mutate(identificationRemarks = ifelse(grepl("Limacina helicina acuta", verbatimIdentification), 
-                                        "Morphotype: acuta", identificationRemarks))
-
-# Change scientificName of Scolecithricella ovata to PSEUDOAMALLOTHRIX OVATA, as per Alexei Pinchuk and Moira Galbraith. Scolecithricella ovata is outdated. 
-# Include previous identification in separate column. 
-IYS2022_bongo_final <- IYS2022_bongo_final %>%
-  mutate(previousIdentifications = ifelse(scientificName == "Scolecithricella ovata (Farran, 1905)", "Scolecithricella ovata", ""),
-         identificationReferences = ifelse(scientificName == "Scolecithricella ovata (Farran, 1905)", "https://copepodes.obs-banyuls.fr/en/fichesp.php?sp=1465", identificationReferences),
-         identificationRemarks = ifelse(scientificName == "Scolecithricella ovata (Farran, 1905)", "Previous identification outdated as per data provider.", identificationRemarks),
-         scientificName = ifelse(scientificName == "Scolecithricella ovata (Farran, 1905)", "Pseudoamallothrix ovata (Farran, 1905)", scientificName))
-
-# Add identificationReference and identificationRemarks for Gaetanus simplex
-IYS2022_bongo_final <- IYS2022_bongo_final %>%
-  mutate(identificationReferences = ifelse(scientificName == "Gaetanus simplex (Brodsky, 1950)" & 
-                                             verbatimIdentification == "Gaetanus intermedius",
-                                           "https://copepodes.obs-banyuls.fr/en/fichesp.php?sp=203", identificationReferences),
-         identificationRemarks = ifelse(scientificName == "Gaetanus simplex (Brodsky, 1950)" & 
-                                          verbatimIdentification == "Gaetanus intermedius",
-                                        "Species revised as per Alexei Pinchuk.", identificationRemarks),
-         previousIdentifications = ifelse(scientificName == "Gaetanus simplex (Brodsky, 1950)" & 
-                                            verbatimIdentification == "Gaetanus intermedius",
-                                          "Gaetanus intermedius", previousIdentifications))
-
-# Replace N/A with blanks in the sex, lifestage and scientificNameAuthorship columns:
-IYS2022_bongo_final$scientificNameAuthorship <- gsub("NA", "", IYS2022_bongo_final$scientificNameAuthorship)
-IYS2022_bongo_final$lifeStage <- gsub("NA", "", IYS2022_bongo_final$lifeStage)
-IYS2022_bongo_final$sex <- gsub("NA", "", IYS2022_bongo_final$sex)
-
-# Add basisOfRecord (required):
-IYS2022_bongo_final$basisOfRecord <- "HumanObservation"
-
-# For observations with identificationQualifier, include reasoning in the identificationRemarks. The general reasoning has been provided by Moira G. 
-IYS2022_bongo_final <- IYS2022_bongo_final %>%
-  mutate(identificationRemarks = ifelse(identificationQualifier == "sp. aff.", 
-                                        "Taxa documented is the closest affiliation to taxa observed, but not the taxa observed.",
-                                        identificationRemarks),
-         identificationRemarks = ifelse(identificationQualifier == "sp. indet.", 
-                                        "Taxa is within this taxonomic rank but cannot be identified further due to life stage, missing body parts or due to the destructive nature of the sampling, preservation and analysis process.", 
-                                        identificationRemarks))
-
-# For now, remove the individualCount, organismQuantity and organismQuantityType columns until approved for publication:
-IYS2022_bongo_occ <- IYS2022_bongo_final %>% select(-c("individualCount", "organismQuantity", "organismQuantityType", "size_range", "Station"))
-
-#TODO: Remove following lines once crosswalk is complete: 
-IYS2022_bongo_final[is.na(IYS2022_bongo_final)] <- ""
-write_csv(IYS2022_bongo_final, here("standardized_data", "IYS2022_bongo_final.csv"))
-```
-
-On November 17, 2023, Joanne Breckenridge sent 2022 standardized files. Making sure the contents are similar:
-
-
-```{r}
-# Save as .csv file
-IYS2022_bongo_occ[is.na(IYS2022_bongo_occ)] <- ""
-write_csv(IYS2022_bongo_occ, here("standardized_data", "IYS2022_bongo_occ.csv"))
-
-# I will also generate a small occ file with the unique species occurrences, to manually check that I've made the necessary changes:
-occ_manual_check <- IYS2022_bongo_occ %>%
-  select(verbatimIdentification, scientificName, specificEpithet, sex, lifeStage, identificationQualifier, identificationRemarks,
-         previousIdentifications, identificationReferences) %>% distinct()
-
-write_csv(occ_manual_check, here("standardized_data", "occ_manual_check.csv"))
-```
-
-We want to standardize the data as well for the IYS Data Template. To this end, we'll have to include the metadata in the _Sampling Events_ sheet, and specimen data in _Bongo Specimen Data_. To put it in that format, combine the Event Core and occurrence extension and select and rename the correct columns:
+We want to standardize the data as well for the IYS Data Template, to allow integration into the Integrated Data Collection. To this end, we'll have to include the metadata in the _Sampling Events_ sheet, and specimen data in _Bongo Specimen Data_. To put it in that format, combine the Event Core and occurrence extension and select and rename the correct columns. **Please note: To facilitate comparison across vessels, we will likely end up using the standardized data tables as provided by Joanne Breckenridge for Version 5 of the Integrated Data Collection. As such, this chunk of code will likely move to a separate repository that will include standardized zooplankton data from 2019, 2020 and 2022**. 
 
 ```{r IYS Template, eval = FALSE}
 bongo2022_sampling_event <- IYS2022_bongo_event %>%
@@ -1146,197 +707,6 @@ write.xlsx(bongo2022_template, file="IYS2022_Zooplankton_Template.xlsx", sheetNa
            row.names=FALSE)
 ```
 
-
-Finally, develop the extended measurements or facts extensions and combine them.
-
-Bottom depth:
-
-```{r bottom_depth, eval = FALSE}
-bongo2022_bottomdepth <- tinro2022_bongo_event %>%
-  select(eventID,
-         Depth_m) %>%
-  distinct(eventID, .keep_all = TRUE) %>%
-  mutate_all(as.character) %>%
-  pivot_longer(cols = Depth_m,
-               names_to = "measurementType",
-               values_to = "measurementValue") %>%
-  mutate(measurementType = recode(measurementType,
-                                 Depth_m = "bottom_depth"),
-         measurementID = paste(eventID, measurementType, sep = "-")) %>%
-  mutate(measurementTypeID = case_when(
-    measurementType == "bottom_depth" ~ "http://vocab.nerc.ac.uk/collection/C00/current/SCILOG/"),
-         measurementUnit = case_when(
-    measurementType == "bottom_depth" ~ "meter"),
-         measurementUnitID = case_when(
-    measurementUnit == "meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/ULAA/"),
-    measurementValueID = NA) %>%
-  select(eventID, measurementID, measurementType, measurementTypeID, measurementValue, measurementValueID,
-         measurementUnit, measurementUnitID)
-```
-
-Sampling effort:
-
-``` {r sampling effort, eval = FALSE}
-bongo2022_sampling <- tinro2022_bongo_event %>%
-  select(eventID, 
-         `Vol filtered (m^3)`) %>%
-  mutate(speed_tow = 1) %>%
-  distinct(eventID, .keep_all = TRUE) %>%
-  mutate_all(as.character) %>%
-  pivot_longer(cols = `Vol filtered (m^3)`:speed_tow,
-               names_to = "measurementType",
-               values_to = "measurementValue") %>%
-  mutate(measurementType = recode(measurementType,
-                                 `Vol filtered (m^3)` = "volume_filtered"),
-         measurementID = paste(eventID, measurementType, sep = "-"),
-         measurementTypeID = case_when(
-           measurementType == "volume_filtered" ~ "http://vocab.nerc.ac.uk/collection/P09/current/VOLF/", 
-           measurementType == "speed_tow" ~ "http://vocab.nerc.ac.uk/collection/P01/current/TOWSPEED/"),
-  measurementUnit = case_when(
-    measurementType == "volume_filtered" ~ "cubic meter",
-    measurementType == "speed_tow" ~ "meter per second"),
-  measurementUnitID = case_when(
-    measurementUnit == "cubic meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/MCUB/",
-    measurementUnit == "meter per second" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UVAA/"),
-  measurementValueID = NA) %>%
-    select(eventID, measurementID, measurementType, measurementTypeID, measurementValue, measurementValueID,
-           measurementUnit, measurementUnitID)
-```
-
-Next, add information on the _sampling instrument_. Information on the mesh size and sampling instrument opening came from the Cruise Report and is verified by the data provider. 
-
-``` {r samplingInstrument, eval = FALSE}
-bongo2022_instrument <- tinro2022_bongo_event %>%
-  select(eventID,
-         Gear) %>%
-  mutate(bongo_mesh = 236,
-         bongo_opening = 0.6) %>%
-  distinct(eventID, .keep_all = TRUE) %>%
-  mutate_all(as.character) %>%
-  pivot_longer(cols = Gear:bongo_opening,
-               names_to = "measurementType",
-               values_to = "measurementValue") %>%
-  mutate(measurementID = paste(eventID, "bongo", measurementType, sep = ":"),
-         measurementTypeID = case_when(
-           measurementType == "Gear" ~ "http://vocab.nerc.ac.uk/collection/Q01/current/Q0100002/",
-           measurementType == "bongo_mesh" ~ "http://vocab.nerc.ac.uk/collection/Q01/current/Q0100015/",
-           measurementType == "bongo_opening" ~ "http://vocab.nerc.ac.uk/collection/Q01/current/Q0100017/"))
-
-bongo2022_instrument <- bongo2022_instrument %>%
-  mutate(measurementUnit = case_when(
-           measurementType == "bongo_mesh" ~ "micrometer",
-           measurementType == "bongo_opening" ~ "square meter"),
-         measurementUnitID = case_when(
-           measurementUnit == "micrometer" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UMIC/",
-           measurementUnit == "square meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UMSQ/"),
-         measurementValueID = case_when(
-           measurementValue == "Bongo" ~ "http://vocab.nerc.ac.uk/collection/L22/current/NETT0176/")) %>%
-  select(eventID, measurementID, measurementType, measurementTypeID, measurementValue,
-         measurementValueID, measurementUnit, measurementUnitID)
-```
-
-Next, we create the eMOF extension to associate the length, lifestage and sex measurements to the zooplankton.  
-
-```{r eMOF, eval = FALSE}
-bongo2022_emof <- tinro2022_bongo_occ %>%
-  select(eventID,
-         occurrenceID,
-         lifeStage,
-         sex,
-         `ind/m3`, 
-         size_range) %>%
-  mutate_all(as.character)
-```
-
-```{r specimen size range, eval = FALSE}
-#TODO: Create code to parse out size ranges into separate columns
-
-range <- dplyr::filter(bongo2022_emof, grepl("-", size_range)) %>%
-  separate(col = size_range, into = c("minimumLength", "maximumLength"), sep = "\\-") %>%
-  mutate(size_range = " ")
-
-# Remove any rows where length_mm contains a range, add two dummy columns (minimumLength and maximumLength) and use rbind() to merge `range` with this newly created dataframe.
-minimum <- dplyr::filter(bongo2022_emof, grepl("\\+|>", size_range)) %>%
-  mutate(minimumLength = as.character(unlist(regmatches(size_range, 
-                                                      gregexpr("[[:digit:]]+\\.*[[:digit:]]*", size_range)))),
-         maximumLength = " ")
-
-temp <- bongo2022_emof[ -grep("\\+|>|-", bongo2022_emof$size_range), ] %>%
-  mutate(minimumLength = " ",
-         maximumLength = " ")
-
-bongo2022_emof_fnl <- rbind(range, minimum, temp)
-
-# Remove 'mm' from the size (range) columns:
-bongo2022_emof_fnl[c("minimumLength", "maximumLength", "size_range")] <- lapply(bongo2022_emof_fnl[c("minimumLength", "maximumLength", "size_range")], function(y) gsub("mm", "", y))
-
-# Make some adjustments:
-bongo2022_emof_fnl$length_type <- ifelse(grepl("shell", bongo2022_emof_fnl$maximumLength), "shell length", NA)
-bongo2022_emof_fnl$maximumLength <- gsub("[[:punct:]]", "", bongo2022_emof_fnl$maximumLength)
-bongo2022_emof_fnl$maximumLength <- gsub(" shell length", "", bongo2022_emof_fnl$maximumLength)
-
-#Remove 'fur' from minimumLength and add it to lifeStage column
-bongo2022_emof_fnl$lifeStage <- ifelse(grepl("fur", bongo2022_emof_fnl$minimumLength), "furcilia", bongo2022_emof_fnl$lifeStage)
-bongo2022_emof_fnl$minimumLength <- gsub("fur", "", bongo2022_emof_fnl$minimumLength)
-
-# Remove 'lar' from size_range and add it to lifeStage column
-bongo2022_emof_fnl$lifeStage <- ifelse(grepl("lar", bongo2022_emof_fnl$size_range), "larvae", bongo2022_emof_fnl$lifeStage)
-bongo2022_emof_fnl$size_range <- gsub("lar", "", bongo2022_emof_fnl$size_range)
-
-#TODO: Figure out what to do with 'Megalopa' in the Stage/Length column:
-
-#Extract only sizes (numerical values) from size_range, remove all characters.
-bongo2022_emof_fnl$size_range <- extract_numeric(bongo2022_emof_fnl$size_range)
-```
-
-So then finally the eMOF:
-
-```{r emof cont., eval = FALSE}
-bongo2022_emof_fnl <- bongo2022_emof_fnl %>%
-  mutate_all(as.character) %>%
-  pivot_longer(cols = lifeStage:length_type,
-               names_to = "measurementType",
-               values_to = "measurementValue") %>%
-  mutate(measurementID = paste(occurrenceID, measurementType, sep = "-"),
-    measurementTypeID = case_when(
-      measurementType == "size_range" ~ "http://vocab.nerc.ac.uk/collection/P01/current/OBSINDLX/",
-      measurementType == "maximumLength" ~ "http://vocab.nerc.ac.uk/collection/P01/current/OBSMAXLX/",
-      measurementType == "minimumLength" ~ "http://vocab.nerc.ac.uk/collection/P01/current/OBSMINLX/",
-      measurementType == "lifeStage" ~ "http://vocab.nerc.ac.uk/collection/P01/current/LSTAGE01/",
-      measurementType == "sex" ~ "http://vocab.nerc.ac.uk/collection/P01/current/ENTSEX01/",
-      measurementType == "ind/m3" ~ "http://vocab.nerc.ac.uk/collection/P01/current/SDBIOL01/",
-      measurementType == "length_type" ~ " "), 
-    measurementUnit = case_when(
-      measurementType %in% c("length", "minimumLength", "maximumLength") ~ "millimeter",
-      measurementType == "ind/m3" ~ "individuals per cubic meter"), 
-    measurementUnitID = case_when(
-      measurementUnit == "millimeter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UXMM/",
-      measurementUnit == "individuals per cubic meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UPMM/"),
-    measurementValueID = case_when(
-      measurementValue == "male" ~ "http://vocab.nerc.ac.uk/collection/S10/current/S103/",
-      measurementValue == "female" ~ "http://vocab.nerc.ac.uk/collection/S10/current/S102/",
-      measurementValue == "Adult" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1116/",
-      measurementValue == "V" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1112/",
-      measurementValue == "IV" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1110/",
-      measurementValue == "IV-V" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1111/",
-      measurementValue == "III" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S118/",
-      measurementValue == "II" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S117/",
-      measurementValue == "I" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S111/",
-      measurementValue == "juvenile" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1127/",
-      measurementValue == "furcilia" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1123/",
-      measurementValue == "egg" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1122/",
-      measurementValue == "nauplii" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1130/",
-      measurementValue == "cal" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1118/",
-      measurementValue == "larvae" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1128/",
-      measurementValue == "Megalopa" ~ "https://vocab.nerc.ac.uk/collection/S11/current/S1167/"),
-    measurementRemarks = NA) %>%
-  drop_na(measurementValue)
-
-bongo2022_tinro_emof <- bind_rows(bongo2022_bottomdepth, bongo2022_sampling, bongo2022_instrument, bongo2022_emof_fnl)
-
-# Make sure the folder path exists already (e.g. ./Bongo/tidy_data)
-write_csv(bongo2022_tinro_emof, here("standardized_data", "bongo2022_tinro_emof.csv"))
-```
 
 
 
