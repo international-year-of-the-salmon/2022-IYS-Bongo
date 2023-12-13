@@ -234,7 +234,7 @@ write_csv(IYS2022_bongo_event, here("standardized_data", "IYS2022_bongo_event.cs
 
 ## Section 2. Occurrence extension
 
-Next, create the occurrence extensions. In the following section we develop an occurrence extension that will be nested under the Event Core. The occurrence extension will have unique occurrenceIDs that are associated with a specific observation of a taxa/lifestage/sex combination at a sampling station. These occurrenceIDs will therefore follow a similar format to the eventIDs and be nested under these IDs. The occurrenceIDs will have data on taxa (identified to the lowest rank practical), developmental stage and sex. The observed taxa are cross referenced to the WoRMS database. For this to happen, some ids have been modified slightly, however the original recording of the taxa has been preserved under _verbatimIdentification_. If any changes are made to the original recording as per the updated version from Joanne Breckenridge (UBC), the previous identification will remain recorded under _previousIdentifications_. 
+Next, create the occurrence extensions. In the following section we develop an occurrence extension that will be nested under the Event Core. The occurrence extension will have unique occurrenceIDs that are associated with a specific observation of a taxa/lifestage/sex combination at a sampling station. These occurrenceIDs will therefore follow a similar format to the eventIDs and be nested under these IDs. The occurrenceIDs will have data on taxa (identified to the lowest rank practical), developmental stage and sex. The observed taxa are cross referenced to the WoRMS database. For this to happen, some ids have been modified slightly, however the original recording of the taxa has been preserved under _verbatimIdentification_. If any changes are made to the original recording as per the updated version from Joanne Breckenridge (UBC), the previous identification will remain recorded under _previousIdentifications_. Where cells were left blank we change these to _NA_ as this makes it a little easier to drop them in the eMOF. 
 
 ```{r}
 IYS2022_occ <- IYS2022_occ %>%
@@ -242,7 +242,8 @@ IYS2022_occ <- IYS2022_occ %>%
          lifeStage = Dev_stage, 
          verbatimIdentification = original_id, 
          eventID, Abundance_m3, Abundance_m2) %>%
-  filter(Abundance_m3 != 0.00000)
+  filter(Abundance_m3 != 0.00000) %>%
+  mutate_all(na_if, "")
 
 IYS2022_occ$sex[IYS2022_occ$sex == "F"] <- "Female"
 IYS2022_occ$sex[IYS2022_occ$sex == "M"] <- "Male"
@@ -272,10 +273,13 @@ IYS2022_occ <- IYS2022_occ %>%
   mutate(identificationRemarks = ifelse(grepl("Limacina helicina acuta", verbatimIdentification), 
                                         "Morphotype: acuta", identificationRemarks))
 
+# Add some information on lifestages:
 IYS2022_occ <- IYS2022_occ %>%
   mutate(lifeStage = ifelse(grepl("trich", scientific_name), "trochophore", IYS2022_occ$lifeStage))
 IYS2022_occ$lifeStage[IYS2022_occ$verbatimIdentification == "Siphonophore bract"] <- "polygastric"
 IYS2022_occ$lifeStage[IYS2022_occ$verbatimIdentification == "Siphonophora bracts"] <- "polygastric"
+IYS2022_occ$lifeStage[IYS2022_occ$lifeStage == "C4/C5"] <- "C4-5"
+IYS2022_occ$lifeStage[IYS2022_occ$lifeStage == "Megalopa"] <- "megalopa"
 
 # Size (ranges) in the scientific_name should be removed
 IYS2022_occ$scientific_name <-  gsub("0.5mm", "", IYS2022_occ$scientific_name)
@@ -422,9 +426,9 @@ The eMOF data table will be specific to information that can be nested under the
 
 ```{r emof cont., eval = FALSE}
 bongo2022_emof <- IYS2022_occ_final %>%
-  select(occurrenceID, sex, lifeStage, Abundance_m3, Abundance_m2) %>%
+  select(eventID, occurrenceID, sex, lifeStage, Abundance_m3, Abundance_m2) %>%
   mutate_all(as.character) %>%
-  pivot_longer(cols = sex:Abundance_m3,
+  pivot_longer(cols = sex:Abundance_m2,
                names_to = "measurementType",
                values_to = "measurementValue") %>%
   mutate(measurementID = paste(occurrenceID, measurementType, sep = "-"),
@@ -435,10 +439,12 @@ bongo2022_emof <- IYS2022_occ_final %>%
       measurementType == "Abundance_m2" ~ "http://vocab.nerc.ac.uk/collection/P01/current/SDBIOL02/"),
     measurementUnit = case_when(
       measurementType == "Abundance_m3" ~ "individuals per cubic meter",
-      measurementType == "Abundance_m2" ~ "individuals per square meter"), 
+      measurementType == "Abundance_m2" ~ "individuals per square meter",
+      !measurementType %in% c("Abundance_m3", "Abundance_m2") ~ "not applicable"), 
     measurementUnitID = case_when(
       measurementUnit == "individuals per cubic meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UPMM/",
-      measurementUnit == "individuals per square meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UPMS/"),
+      measurementUnit == "individuals per square meter" ~ "http://vocab.nerc.ac.uk/collection/P06/current/UPMS/",
+      measurementUnit == "not applicable" ~ "https://vocab.nerc.ac.uk/collection/P06/current/XXXX/"),
     measurementValueID = case_when(
       measurementValue == "Male" ~ "http://vocab.nerc.ac.uk/collection/S10/current/S103/",
       measurementValue == "Female" ~ "http://vocab.nerc.ac.uk/collection/S10/current/S102/",
@@ -456,7 +462,6 @@ bongo2022_emof <- IYS2022_occ_final %>%
       measurementValue == "nauplii" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1130/",
       measurementValue == "cal" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1118/",
       measurementValue == "larvae" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1128/",
-      measurementValue == "Megalopa" ~ "https://vocab.nerc.ac.uk/collection/S11/current/S1167/",
       measurementValue == "preflexion" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1188/", 
       measurementValue == "calyptopis" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1118/",
       measurementValue == "nectophore" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1197/",
@@ -473,7 +478,6 @@ bongo2022_emof <- IYS2022_occ_final %>%
       measurementValue == "gas floats" ~ " ",
       measurementValue == "megalopa" ~ "https://vocab.nerc.ac.uk/collection/S11/current/S1167/",
       measurementValue == "cyprid" ~ " ",
-      measurementValue == "C4/C5" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1111/",
       measurementValue == "zoea" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1137/", 
       measurementValue == "polygastric" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1101/",
       measurementValue == "nurse" ~ "http://vocab.nerc.ac.uk/collection/S11/current/S1196/",
