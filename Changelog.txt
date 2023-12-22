@@ -11,10 +11,10 @@ The files '2022002 IYS Franklin abund biomass by species n life stage .xlsx' and
 The file 'IYS2022_Shimada_NW_Zooplankton.xlsx' -- stored in /IYS_data_template/ -- is the file used for the sampling event metadata for the Shimada and NW Explorer.
 The file 'IYS_Standardized_Zoop_Taxa_Abundance_2022.csv' is the primary source file for the occurrence data, and is stored in the /original_data/ folder. 
 
-## [version 1.1] 2023-12-xx
+## [version 1.1] 2023-12-22
 
 ### Changed
-- With the addition of the Franklin zooplankton data the recommended citation is: Breckenridge, J., Galbraith, M., King, J., Pakhomov, E., Pinchuk, A., & Stark, C. (2022). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada, F/V Northwest Explorer and R/V CCGS Sir John Franklin during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition (v1.0). North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024
+- With the addition of the Franklin zooplankton data the recommended citation is: Breckenridge, J., Galbraith, M., King, J., Pakhomov, E., Pinchuk, A., & Stark, C. (2023). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada, F/V Northwest Explorer and R/V CCGS Sir John Franklin during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition (v1.1). North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024
 - Moved the '7-14 2022 Bongo Logbook-TINRO_clean.xlsx' and '2022002 IYS Franklin abund biomass by species n life stage .xlsx' files from the original_data folder to a subfolder herein, called 'archived'. These records are still used to ingest metadata record around the sampling event. 
 
 ### Added
@@ -25,7 +25,7 @@ The file 'IYS_Standardized_Zoop_Taxa_Abundance_2022.csv' is the primary source f
 
 ## [version 1.0] 2023-05-01
 
-Recommended citation at the time of this unreleased version is: Pakhomov, E., Pinchuk, A., & Stark, C. (2022). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada and F/V Northwest Explorer during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition. North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024
+Recommended citation at the time of this version is: Pakhomov, E., Pinchuk, A., & Stark, C. (2022). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada and F/V Northwest Explorer during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition. North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024
 
 ### Changed
 - With the addition of the Franklin zooplankton data the script has been changed to include that information and standardize it.
