@@ -226,7 +226,8 @@ IYS2022_bongo_event <- IYS2022_bongo_event %>%
          license = "https://creativecommons.org/licenses/by/4.0/legalcode",
          informationWithheld = "Contact data provider for information on abundance, sizes and biomass.",
          bibliographicCitation = "Breckenridge, J., Galbraith, M., King, J., Pinchuk, A., Stark, C., & Pakhomov, E. (2023). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada, F/V Northwest Explorer and R/V CCGS Sir John Franklin during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition (v1.1). North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024",
-         datasetID = "https://doi.org/10.21966/ymv6-8024")
+         datasetID = "https://doi.org/10.21966/ymv6-8024") %>%
+  select(-station)
 
 # Save as .csv file
 write_csv(IYS2022_bongo_event, here("standardized_data", "IYS2022_bongo_event.csv"))
