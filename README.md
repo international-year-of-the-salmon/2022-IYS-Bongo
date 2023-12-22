@@ -6,7 +6,7 @@
 
 🚢 Recommended citation for this record:
 
-Breckenridge, J., Galbraith, M., King, J., Pinchuk, A., Stark, C., & Pakhomov, E. (2023). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada, F/V Northwest Explorer and R/V CCGS Sir John Franklin during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition (1st ed.) [Data set]. North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024
+Breckenridge, J., Galbraith, M., King, J., Pinchuk, A., Stark, C., & Pakhomov, E. (2023). Bongo Zooplankton Data from the R/V TINRO, NOAA Bell M. Shimada, F/V Northwest Explorer and R/V CCGS Sir John Franklin during the 2022 International Year of the Salmon Pan-Pacific Winter High Seas Expedition (v1.1). North Pacific Anadromous Fish Commission. https://doi.org/10.21966/ymv6-8024
 
 🐟 The repository is structured as follows: 
   * `original_data` contains processed data files that have been sent to the IYS Data Scientists that have not been formatted to the IYS Data Template.
